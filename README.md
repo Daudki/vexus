@@ -1,86 +1,42 @@
-# VEXUS — AI-Powered Network Security Intelligence Platform
+# VEXUS
 
-**Status: V1 complete — all 8 phases** (Foundation, Discover, Watch,
-Nexus, Detect, Risk, Trace, AI). Every module from the original V1
-scope is implemented, tested, and has a working UI.
+**AI-Powered Network Security Intelligence Platform**
 
-Do not treat anything beyond what's described below as production-ready
-without your own review — see "Known limitations" at the bottom.
+VEXUS observes a network, tracks its assets, detects anomalies, scores risk, and helps a security analyst investigate what's happening — with every conclusion traceable back to real evidence. No fabricated detections, no relationships VEXUS can't back up, no AI output presented as fact.
 
-## What's implemented
+Built for authorized defensive security use: monitoring, inventory, and incident investigation on networks you own or are explicitly authorized to assess. Not an offensive tool — no exploitation, credential harvesting, or automated attack capability exists anywhere in the codebase.
 
-**Phase 1 — Foundation:** JWT auth, RBAC (Admin / Security Analyst /
-Network Administrator / Viewer), audit logging, the VEXUS Data
-Contract, VEXUS Health.
+## Status
 
-**Phase 2 — Discover:** authorized-only network discovery (refuses
-scans outside `AUTHORIZED_SCAN_RANGES`), asset inventory,
-new/changed-asset detection.
+V1 complete — all 8 planned modules implemented and tested (154 backend tests). See [Known limitations](#known-limitations) for what's intentionally out of scope and why.
 
-**Phase 3 — Watch:** active availability/latency/packet-loss
-monitoring (Windows- and Unix-compatible), historical metrics,
-missing-asset detection.
+| Module | What it does |
+|---|---|
+| **Foundation** | JWT auth, role-based access control, audit logging |
+| **Discover** | Authorized-only network scanning, asset inventory, change detection |
+| **Watch** | Availability/latency monitoring, missing-asset detection |
+| **Nexus** | Asset relationships (manual + subnet-inferred), confidence-labeled |
+| **Detect** | Rule-based detection engine → deduplicated, tunable alerts |
+| **Risk** | Explainable 0–100 scoring — every point traced to a named factor |
+| **Trace** | Incident investigation: evidence linking, timeline, notes |
+| **AI** | Assistant that explains alerts/incidents from VEXUS's own data |
 
-**Phase 4 — Nexus:** asset relationships with mandatory confidence
-classification (confirmed/inferred) — manual links and subnet
-inference only; no traffic-based relationships, since VEXUS captures
-no network traffic anywhere.
+## Stack
 
-**Phase 5 — Detect:** 5 rule-based detectors turning `NetworkEvent`s
-into deduplicated, tunable `Alert`s.
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy, Alembic, PostgreSQL/SQLite
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Infra:** Docker Compose (Postgres + Redis + backend + frontend)
 
-**Phase 6 — Risk:** explainable scoring — every score is a sum of
-named, visible factors (criticality, trust status, active alerts).
+## Quick start
 
-**Phase 7 — Trace:** incident investigation — analyst-created
-incidents linking alerts/assets as evidence, a timeline assembled
-entirely from real evidence, append-only investigation notes, full
-status workflow.
-
-**Phase 8 — AI:**
-- `AIProvider` abstraction: `NullProvider` (default — the platform
-  works fully with AI disabled) and `AnthropicProvider` (real HTTP
-  integration against `api.anthropic.com`).
-- **Structured output is enforced, not just prompted.** The model must
-  return JSON matching `{observed_facts, inferences, hypotheses,
-  recommendations, confidence}`; the response is Pydantic-validated
-  before it reaches any caller. Malformed output raises an error —
-  it's never passed through or silently patched.
-- Context sent to the model is deliberately minimal: only
-  already-surfaced fields (alert/asset/incident summaries), never a raw
-  DB dump.
-- Every query is logged (`AIQueryLog`) — the audit trail and the
-  history the UI reads from, so repeat views don't re-call the API.
-- Three entry points: explain an alert, summarize an incident, ask a
-  free-form question grounded in a specific alert/incident/asset.
-- **Honest limitation:** the pure request-building and response-parsing
-  logic is fully unit-tested (9 tests covering valid responses,
-  malformed JSON, schema violations, multi-block responses, missing
-  content). The live HTTP call to Anthropic's API has not been
-  exercised against a real key in this environment — verify before
-  relying on it.
-
-## Windows / Termux compatibility notes
-
-`PingCollector` (Watch) detects the OS and uses correct `ping` syntax
-for Windows and Linux/macOS/Termux. `NmapCollector` (Discover) assumes
-`nmap` is on `PATH` and hasn't been Windows-adapted.
-
-## Quick start (local dev, no Docker)
-
-### Backend — macOS/Linux/Termux
+### Backend
 ```bash
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp ../.env.example .env
 ```
-Edit `.env`: set a real `SECRET_KEY`
-(`python -c "import secrets; print(secrets.token_urlsafe(64))"`).
-Optionally set `AUTHORIZED_SCAN_RANGES` (to run real scans) and
-`AI_PROVIDER=cloud` + `ANTHROPIC_API_KEY` (to enable the AI assistant
-— without these, AI endpoints work but return a "not configured"
-response instead of a real explanation).
+Edit `.env` — set `SECRET_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(64))"`). Optionally set `AUTHORIZED_SCAN_RANGES` to enable real scans, or `AI_PROVIDER=cloud` + `ANTHROPIC_API_KEY` to enable the AI assistant.
 
 ```bash
 python3 -m alembic upgrade head
@@ -92,101 +48,49 @@ python3 -m scripts.seed
 
 uvicorn app.main:app --reload
 ```
+API docs: `http://localhost:8000/docs`
 
-### Backend — Windows (PowerShell)
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy ..\.env.example .env
-```
-Edit `.env` the same way, then:
-```powershell
-python -m alembic upgrade head
-$env:VEXUS_ADMIN_USERNAME="admin"
-$env:VEXUS_ADMIN_EMAIL="admin@vexus.local"
-$env:VEXUS_ADMIN_PASSWORD="<choose-a-strong-password>"
-python -m scripts.seed
-uvicorn app.main:app --reload
-```
-
-API docs (any OS): http://localhost:8000/docs
-
-### Frontend (same on all platforms)
+### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-App: http://localhost:5173
+App: `http://localhost:5173`
+
+### Docker Compose (alternative)
+```bash
+cp .env.example .env   # set SECRET_KEY and admin vars first
+docker compose up --build
+```
 
 ### Tests
 ```bash
 cd backend
 python3 -m pytest tests/ -v
 ```
-154 tests covering every module: auth, RBAC, discovery, monitoring
-(cross-platform ping parsing), topology, detection/alerting, risk
-scoring, incident investigation, and AI (pure request/response
-functions, service-level with an injected fake provider, and full
-API-level RBAC).
 
-## Quick start (Docker Compose)
+## Architecture
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+Full system diagram, ER design, security model, and the module-by-module design rationale live in [`docs/architecture/`](docs/architecture).
 
-## Project structure
+Core principles enforced throughout the codebase, not just documented:
+- **Evidence First** — no detection, risk score, or AI response exists without a traceable link back to raw observed data.
+- **Confidence-aware** — severity, confidence, and risk are always tracked separately, never conflated.
+- **Read-only** — VEXUS observes and recommends; it never takes automated action on the network.
+- **Self-aware** — the platform monitors its own worker health and flags stale/incomplete data rather than presenting it as current.
 
-See `docs/architecture/` for the full architecture document.
+## Known limitations
 
-```
-vexus/
-├── backend/    FastAPI app (see backend/app/<domain>/ for each module)
-├── frontend/   React + TS + Tailwind
-├── docs/       Architecture doc (docs/architecture/)
-└── docker-compose.yml
-```
+Stated here rather than discovered later:
 
-## Security notes
+- **No background scheduler.** Discovery, monitoring, detection, and risk scoring all run on-demand (triggered via the UI/API), not on a timer. Each has a pluggable collector/provider interface, so wiring in a real worker loop later doesn't require a rewrite.
+- **Nmap-based discovery and the live AI API call are implemented but not exercised against real infrastructure** in the environment this was built in — verify both before relying on them.
+- **Detect** implements 5 of 8 originally-scoped rule types (no port-exposure, connection-failure, or traffic-volume detection — none have a real data source yet).
+- **Risk** scores from criticality, trust status, and active alerts only — no vulnerability feed or behavioral-baseline integration exists yet.
+- **Trace** has no automatic incident correlation; every incident is analyst-created. Multi-alert auto-correlation is future scope.
+- **Nexus** has no traffic-based relationships — VEXUS doesn't capture network traffic anywhere in the current build.
 
-- `AUTHORIZED_SCAN_RANGES` in `.env` is empty by default. Discovery
-  refuses to scan anything outside explicitly authorized CIDR ranges.
-- Monitoring only actively probes (ICMP ping) assets already in the
-  inventory with a known IP.
-- AI context is minimal by design — never a raw network/DB dump.
-- Never commit a real `.env`.
+## License
 
-## Known limitations (honest, not hidden)
-
-- **No background job scheduler.** Discovery, monitoring, detection,
-  risk, and AI all run synchronously when triggered via the UI/API —
-  set up your own external scheduler (cron, Task Scheduler, Termux's
-  `cron`) to hit those endpoints periodically. The provider
-  abstractions throughout (`DiscoveryCollector`, `MonitoringCollector`,
-  `AIProvider`) are exactly what a real worker loop would call, so
-  adding one later isn't a rewrite.
-- `NmapCollector`, `PingCollector`'s Windows path, and
-  `AnthropicProvider`'s live HTTP call are real implementations that
-  haven't been exercised against real external systems in this dev
-  environment — verify each before relying on it in production.
-- Nexus has no traffic-based relationships anywhere in the platform.
-- Detect implements 5 of 8 originally-designed rules (no port-exposure,
-  connection-failure, or traffic-volume detection — no data source
-  exists for any of them yet).
-- Risk implements 3 of 5 originally-envisioned factor categories (no
-  vulnerability data, no behavioral-anomaly baselines).
-- Trace has no automatic incident-candidate generation — that's VEXUS
-  Correlate, explicitly deferred to V2.
-- AI has no local-model provider yet, only cloud (Anthropic).
-
-## What's next (V2, per the architecture doc)
-
-VEXUS Sense (behavioral baselines), VEXUS Correlate (multi-alert →
-incident correlation), threat intelligence (CVE/NVD), SIEM/syslog
-ingestion, identity integrations, and a real background worker/scheduler
-are the natural next steps — each one fills a gap explicitly called out
-above, rather than being a new, disconnected direction.
+MIT — see [LICENSE](LICENSE).

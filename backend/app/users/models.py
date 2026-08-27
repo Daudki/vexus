@@ -1,45 +1,51 @@
 """
-User and Role persistence models.
-
-Roles are a fixed enum for V1 (per the architecture doc: Admin, Security
-Analyst, Network Administrator, Viewer). Permission granularity beyond
-role membership is intentionally deferred — `Role` is modeled as its own
-table (not just a string column) so a future `Permission` table can be
-attached without migrating `User`.
+User models.
 """
+from datetime import datetime
+from typing import Optional
 import enum
+import uuid
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, String, Text, Float
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
-from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.database.base import Base
 
 
 class RoleName(str, enum.Enum):
+    """User roles."""
     ADMIN = "admin"
-    SECURITY_ANALYST = "security_analyst"
-    NETWORK_ADMINISTRATOR = "network_administrator"
+    ANALYST = "analyst"
     VIEWER = "viewer"
 
 
-class Role(UUIDPrimaryKeyMixin, Base):
+class Role(Base):
     __tablename__ = "roles"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Enum(RoleName), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    
+    users = relationship("User", back_populates="role")
 
-    name: Mapped[RoleName] = mapped_column(Enum(RoleName), unique=True, nullable=False)
-    description: Mapped[str] = mapped_column(String(255), default="")
 
-    users: Mapped[list["User"]] = relationship(back_populates="role")
-
-
-class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class User(Base):
     __tablename__ = "users"
-
-    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    role_id: Mapped[str] = mapped_column(ForeignKey("roles.id"), nullable=False)
-    role: Mapped["Role"] = relationship(back_populates="users")
-
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_login: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    
+    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
+    role = relationship("Role", back_populates="users")
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_login = Column(DateTime, nullable=True)
+    
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, username={self.username})>"

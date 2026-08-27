@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
@@ -5,33 +7,29 @@ from app.users.models import User
 
 
 class AuditService:
-    """The only writer of AuditLog rows. Never exposes update/delete."""
-
     def __init__(self, db: Session):
         self.db = db
 
     def record(
         self,
-        *,
         action: str,
-        actor: User | None = None,
-        target_type: str = "",
-        target_id: str = "",
-        detail: str = "",
-        ip_address: str = "",
+        actor: Optional[User] = None,
+        target_type: Optional[str] = None,
+        target_id: Optional[str] = None,
+        detail: Optional[str] = None,
+        ip_address: Optional[str] = None,
         success: bool = True,
     ) -> AuditLog:
-        entry = AuditLog(
-            actor_user_id=actor.id if actor else None,
-            actor_username=actor.username if actor else "anonymous",
+        """Record an audit entry."""
+        log = AuditLog(
             action=action,
-            target_type=target_type,
-            target_id=target_id,
-            detail=detail,
+            user_id=actor.id if actor else None,
+            resource_type=target_type,
+            resource_id=target_id,
+            details={"detail": detail, "success": success} if detail else {"success": success},
             ip_address=ip_address,
-            success=success,
+            timestamp=datetime.utcnow(),
         )
-        self.db.add(entry)
-        self.db.commit()
-        self.db.refresh(entry)
-        return entry
+        self.db.add(log)
+        self.db.flush()
+        return log

@@ -1,44 +1,32 @@
-import re
+"""
+User schemas for API validation.
+"""
+from typing import Optional
 from datetime import datetime
-from typing import Annotated
-
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from app.users.models import RoleName
 
-# Deliberately format-only (not pydantic's EmailStr / email-validator),
-# which rejects reserved-use TLDs like .local, .internal, .corp, .lan —
-# exactly the domains internal security tooling commonly runs on.
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def _validate_email_format(value: str) -> str:
-    if not _EMAIL_RE.match(value):
-        raise ValueError("must be a valid email address format")
-    return value
-
-
-EmailAddress = Annotated[str, AfterValidator(_validate_email_format)]
-
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
-    email: EmailAddress
-    password: str = Field(min_length=10, max_length=128)
+    """Schema for creating a user."""
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
     role: RoleName = RoleName.VIEWER
 
 
-class UserRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class UserUpdateRole(BaseModel):
+    """Schema for updating a user's role."""
+    role: RoleName
 
+
+class UserRead(BaseModel):
+    """Schema for reading a user."""
     id: str
     username: str
-    email: EmailAddress
-    role: RoleName
+    email: str
+    role: str
     is_active: bool
     created_at: datetime
-    last_login: datetime | None = None
-
-
-class UserUpdateRole(BaseModel):
-    role: RoleName
+    last_login: Optional[datetime] = None

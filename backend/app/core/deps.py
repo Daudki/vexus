@@ -1,14 +1,9 @@
 """
-Shared FastAPI dependencies: DB session passthrough, current-user
-resolution from the access token, and role-based access control.
-
-Every protected route enforces permissions here, at the router boundary,
-never deep inside service logic — this keeps RBAC auditable in one place.
+FastAPI dependencies for authentication and authorization.
 """
-from typing import Iterable
-
+from typing import Optional
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
@@ -16,48 +11,95 @@ from app.database.session import get_db
 from app.users.models import RoleName, User
 from app.users.repository import UserRepository
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
-    credentials_error = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    claims = decode_token(token)
-    if claims is None or claims.get("type") != "access":
-        raise credentials_error
-
-    user_id = claims.get("sub")
-    if user_id is None:
-        raise credentials_error
-
+    """Get the current authenticated user."""
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    
+    token = credentials.credentials
+    payload = decode_token(token)
+    
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+    
     user = UserRepository(db).get_by_id(user_id)
-    if user is None or not user.is_active:
-        raise credentials_error
-
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is disabled",
+        )
+    
     return user
 
 
-def require_role(*allowed_roles: RoleName):
-    """Dependency factory: `Depends(require_role(RoleName.ADMIN))`."""
-
-    def _check(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role.name not in allowed_roles:
+def require_role(role: RoleName):
+    """Dependency factory for role-based access control."""
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role.name != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action.",
+                detail=f"Requires role: {role.value}",
             )
         return current_user
+    return dependency
 
-    return _check
+
+def require_any_role(roles: list[RoleName]):
+    """Dependency factory for multiple roles."""
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role.name not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of roles: {[r.value for r in roles]}",
+            )
+        return current_user
+    return dependency
 
 
-def require_any_role(current_user: User = Depends(get_current_user)) -> User:
-    """Just requires authentication, any role — used for read-mostly endpoints."""
-    return current_user
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Get current user if authenticated, otherwise None."""
+    if not credentials:
+        return None
+    
+    token = credentials.credentials
+    payload = decode_token(token)
+    if not payload:
+        return None
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    
+    user = UserRepository(db).get_by_id(user_id)
+    if not user or not user.is_active:
+        return None
+    
+    return user

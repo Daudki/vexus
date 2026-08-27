@@ -32,39 +32,84 @@ from app.ai import models as _ai_models  # noqa: F401,E402
 
 
 def run() -> None:
+    # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    
     try:
+        # 1. Create all roles first
+        roles_created = []
         for role_name in RoleName:
             existing = db.query(Role).filter_by(name=role_name).first()
             if not existing:
-                db.add(Role(name=role_name, description=role_name.value.replace("_", " ").title()))
-        db.commit()
-
-        admin_username = os.getenv("VEXUS_ADMIN_USERNAME")
-        admin_email = os.getenv("VEXUS_ADMIN_EMAIL")
-        admin_password = os.getenv("VEXUS_ADMIN_PASSWORD")
-
-        if admin_username and admin_email and admin_password:
-            if not db.query(User).filter_by(username=admin_username).first():
-                admin_role = db.query(Role).filter_by(name=RoleName.ADMIN).first()
-                db.add(
-                    User(
-                        username=admin_username,
-                        email=admin_email,
-                        password_hash=hash_password(admin_password),
-                        role_id=admin_role.id,
-                    )
-                )
-                db.commit()
-                print(f"Created initial admin user '{admin_username}'.")
+                role = Role(name=role_name, description=role_name.value.replace("_", " ").title())
+                db.add(role)
+                roles_created.append(role_name.value)
+                print(f"✅ Created role: {role_name.value}")
             else:
-                print(f"Admin user '{admin_username}' already exists — skipping.")
+                print(f"ℹ️ Role already exists: {role_name.value}")
+        
+        # IMPORTANT: Commit roles BEFORE creating user
+        db.commit()
+        print(f"\n✅ Roles committed to database")
+
+        # 2. Get admin role (must exist now)
+        admin_role = db.query(Role).filter_by(name=RoleName.ADMIN).first()
+        if not admin_role:
+            print("❌ ERROR: Admin role not found after creation!")
+            return
+
+        print(f"✅ Admin role ID: {admin_role.id}")
+
+        # 3. Create admin user
+        admin_username = os.getenv("VEXUS_ADMIN_USERNAME", "admin")
+        admin_email = os.getenv("VEXUS_ADMIN_EMAIL", "admin@vexus.local")
+        admin_password = os.getenv("VEXUS_ADMIN_PASSWORD", "AdminPassword123!")
+
+        # Check if user exists
+        existing_user = db.query(User).filter_by(username=admin_username).first()
+        
+        if existing_user:
+            print(f"ℹ️ Admin user '{admin_username}' already exists.")
+            # Ensure role is correct
+            if existing_user.role_id != admin_role.id:
+                existing_user.role_id = admin_role.id
+                db.commit()
+                print(f"✅ Updated role for {admin_username} to ADMIN")
+            else:
+                print(f"ℹ️ Role already correct for {admin_username}")
         else:
-            print(
-                "VEXUS_ADMIN_USERNAME / VEXUS_ADMIN_EMAIL / VEXUS_ADMIN_PASSWORD not set — "
-                "skipped initial admin creation. Roles were still seeded."
+            # Create new admin user
+            user = User(
+                username=admin_username,
+                email=admin_email,
+                password_hash=hash_password(admin_password),
+                role_id=admin_role.id,
+                is_active=True,
             )
+            db.add(user)
+            db.commit()
+            print(f"✅ Created admin user: {admin_username}")
+
+        # 4. Verify
+        verify_user = db.query(User).filter_by(username=admin_username).first()
+        if verify_user:
+            print(f"\n📋 Verification:")
+            print(f"  - Username: {verify_user.username}")
+            print(f"  - Email: {verify_user.email}")
+            print(f"  - Role ID: {verify_user.role_id}")
+            print(f"  - Role Name: {verify_user.role.name.value if verify_user.role else 'NO ROLE!'}")
+            print(f"  - Is Active: {verify_user.is_active}")
+            print(f"\n🎉 Seeding complete!")
+            print(f"Login: {admin_username} / {admin_password}")
+        else:
+            print("❌ Failed to verify user creation!")
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
 

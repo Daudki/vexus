@@ -1,18 +1,13 @@
 """
 Auth application service.
-
-Orchestrates login/refresh: pulls the user via the repository, verifies
-the password via core.security, issues tokens, and writes an audit log
-entry for every attempt (success AND failure — failed logins are one of
-the explicit audit examples in the architecture doc).
 """
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.audit.service import AuditService
-from app.core.security import create_token, verify_password
-from app.users.models import User
+from app.core.security import create_token, verify_password, decode_token
+from app.users.models import User, RoleName
 from app.users.repository import UserRepository
 
 
@@ -49,18 +44,33 @@ class AuthService:
             )
             raise AuthError("This account is disabled.")
 
+        # Update last login - use the repository method that handles stale data
         self.users.update_last_login(user, datetime.now(timezone.utc))
         self.audit.record(action="login", actor=user, ip_address=ip_address, success=True)
+        
+        # Refresh the user to get updated data
+        self.db.refresh(user)
         return user
 
     def issue_tokens(self, user: User) -> tuple[str, str]:
-        access = create_token(user.id, "access", extra_claims={"role": user.role.name.value})
-        refresh = create_token(user.id, "refresh")
+        # Get role name, default to "viewer" if role is None
+        if user.role is None:
+            # Try to reload the user with role
+            self.db.refresh(user)
+            # If still None, use VIEWER as fallback
+            role_name = user.role.name.value if user.role else RoleName.VIEWER.value
+        else:
+            role_name = user.role.name.value
+        
+        access = create_token(
+            str(user.id), 
+            "access", 
+            extra_claims={"role": role_name}
+        )
+        refresh = create_token(str(user.id), "refresh")
         return access, refresh
 
     def refresh_access_token(self, refresh_token: str) -> str:
-        from app.core.security import decode_token
-
         claims = decode_token(refresh_token)
         if claims is None or claims.get("type") != "refresh":
             raise AuthError("Invalid or expired refresh token.")
@@ -69,4 +79,10 @@ class AuthService:
         if user is None or not user.is_active:
             raise AuthError("User no longer active.")
 
-        return create_token(user.id, "access", extra_claims={"role": user.role.name.value})
+        role_name = user.role.name.value if user.role else RoleName.VIEWER.value
+        
+        return create_token(
+            str(user.id), 
+            "access", 
+            extra_claims={"role": role_name}
+        )

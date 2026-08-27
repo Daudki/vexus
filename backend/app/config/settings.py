@@ -1,56 +1,107 @@
-"""
-Central application configuration.
-
-All configuration is loaded from environment variables (see .env.example).
-Never hardcode secrets here. This module is imported everywhere via the
-`get_settings()` cached accessor so settings are read once per process.
-"""
-from functools import lru_cache
-from typing import List
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional, List, Union
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-
-    # --- App ---
+    """Application configuration."""
+    
+    # Application
     APP_NAME: str = "VEXUS"
-    APP_ENV: str = "development"  # development | staging | production
+    APP_ENV: str = "development"
     DEBUG: bool = True
-
-    # --- Security ---
-    SECRET_KEY: str  # required, no default — must come from .env
-    JWT_ALGORITHM: str = "HS256"
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-
-    # --- CORS ---
-    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
-
-    # --- Database ---
-    # Falls back to local SQLite for development; use PostgreSQL in production.
-    DATABASE_URL: str = "sqlite:///./vexus_dev.db"
-
-    # --- Redis (job queue, rate limiting) ---
-    REDIS_URL: str = "redis://localhost:6379/0"
-
-    # --- Discovery safety ---
-    # Discovery scans are refused for any target outside these CIDR ranges.
-    # This is intentionally empty by default — an operator must explicitly
-    # authorize ranges before any scan can run.
-    AUTHORIZED_SCAN_RANGES: List[str] = []
-
-    # --- AI provider ---
-    AI_PROVIDER: str = "none"  # none | cloud | local
-    ANTHROPIC_API_KEY: str = ""
-    # Update to whichever model string your API key has access to.
-    AI_MODEL: str = "claude-sonnet-4-5-20250929"
-
-    # --- Rate limiting ---
+    
+    # Database
+    DATABASE_URL: str
+    POSTGRES_PASSWORD: Optional[str] = None
+    
+    # Redis
+    REDIS_URL: Optional[str] = None
+    
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:5173"
+    
+    # Rate Limiting
+    RATE_LIMIT_AUTH_REQUESTS: int = 5
+    RATE_LIMIT_AUTH_WINDOW_MINUTES: int = 15
     LOGIN_RATE_LIMIT: str = "5/minute"
+    
+    # Security
+    CORS_ORIGINS: str = "http://localhost:5173"
+    SECURE_HEADERS_ENABLED: bool = True
+    
+    # Discovery & Scanning
+    AUTHORIZED_SCAN_RANGES: Union[List[str], str, None] = None
+    
+    # AI Configuration
+    AI_PROVIDER: str = "mock"
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    CLOUD_AI_PROVIDER: str = "anthropic"
+    CLOUD_AI_MODEL: str = "claude-3-sonnet-20241022"
+    ANTHROPIC_API_KEY: Optional[str] = None
+    
+    # Admin User
+    VEXUS_ADMIN_USERNAME: str = "admin"
+    VEXUS_ADMIN_EMAIL: str = "admin@vexus.local"
+    VEXUS_ADMIN_PASSWORD: str = "AdminPassword123!"
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+    
+    @property
+    def is_development(self) -> bool:
+        return self.APP_ENV == "development"
+    
+    @property
+    def is_testing(self) -> bool:
+        return self.APP_ENV == "testing"
+    
+    @property
+    def use_sqlite(self) -> bool:
+        return self.DATABASE_URL.startswith("sqlite")
+    
+    @field_validator('AUTHORIZED_SCAN_RANGES', mode='before')
+    @classmethod
+    def parse_authorized_scan_ranges(cls, v):
+        """Parse AUTHORIZED_SCAN_RANGES from string to list."""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith('[') and v.endswith(']'):
+                v = v[1:-1]
+            if not v:
+                return []
+            return [item.strip().strip('"').strip("'") for item in v.split(',') if item.strip()]
+        return []
+    
+    @property
+    def authorized_scan_ranges_list(self) -> List[str]:
+        """Get authorized scan ranges as a list."""
+        if isinstance(self.AUTHORIZED_SCAN_RANGES, list):
+            return self.AUTHORIZED_SCAN_RANGES
+        return []
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = True
+        extra = "ignore"
 
 
-@lru_cache
+# Create a global settings instance
+settings = Settings()
+
+
+# ADD THIS FUNCTION - used by database/session.py
 def get_settings() -> Settings:
-    return Settings()
+    """Get the settings instance."""
+    return settings

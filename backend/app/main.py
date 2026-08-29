@@ -19,6 +19,7 @@ from app.risk.router import router as risk_router
 from app.incidents.router import router as incidents_router
 from app.ai.router import router as ai_router
 from app.audit.router import router as audit_router
+from app.admin.router import router as admin_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(incidents_router)
     app.include_router(ai_router)
     app.include_router(audit_router)
+    app.include_router(admin_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

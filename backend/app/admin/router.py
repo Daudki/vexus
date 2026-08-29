@@ -14,8 +14,10 @@ from app.admin.schemas import (
     UserCreate, UserUpdate, UserResponse,
     RoleCreate, RoleUpdate, RoleResponse,
     SystemSettings, SettingsUpdate,
-    SystemStats, AuditLogResponse
+    SystemStats, AuditLogResponse,
+    ScanRangesUpdate, ScanRangesResponse
 )
+from app.config.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -338,6 +340,44 @@ def get_audit_logs(
         "items": [_audit_to_response(log) for log in logs],
         "total": total,
     }
+
+
+# ==================== Scan Range Settings ====================
+
+@router.get("/settings/scan-ranges", response_model=ScanRangesResponse)
+def get_scan_ranges(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.ADMIN)),
+):
+    """Get the currently authorized discovery scan ranges."""
+    settings = get_settings()
+    return ScanRangesResponse(ranges=list(settings.authorized_scan_ranges_list))
+
+
+@router.put("/settings/scan-ranges", response_model=ScanRangesResponse)
+def update_scan_ranges(
+    payload: ScanRangesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.ADMIN)),
+):
+    """Persist the set of CIDR ranges administrators are allowed to scan."""
+    ranges = []
+    for entry in payload.ranges:
+        clean = str(entry).strip()
+        if clean:
+            ranges.append(clean)
+
+    settings = get_settings()
+    settings.AUTHORIZED_SCAN_RANGES = ranges
+    AuditService(db).record(
+        action="admin.update_scan_ranges",
+        actor=current_user,
+        target_type="system",
+        target_id="scan_ranges",
+        detail=f"Updated authorized scan ranges: {', '.join(ranges) if ranges else 'none'}",
+    )
+    db.commit()
+    return ScanRangesResponse(ranges=ranges)
 
 
 # ==================== System Stats ====================

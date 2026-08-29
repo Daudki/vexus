@@ -20,16 +20,22 @@ def get_ai_provider() -> AIProvider:
     """Default provider for the running deployment. Overridden in tests
     to inject a fake provider instead of requiring a real API key."""
     settings = get_settings()
-    if settings.AI_PROVIDER == "cloud" and settings.ANTHROPIC_API_KEY:
-        return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY, model=settings.AI_MODEL)
+    provider_name = (settings.AI_PROVIDER or "").lower()
+    if provider_name in {"none", "mock"}:
+        return NullProvider()
+    if provider_name == "cloud" and settings.ANTHROPIC_API_KEY:
+        return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY, model=settings.CLOUD_AI_MODEL)
     return NullProvider()
 
 
 @router.get("/status", response_model=AIStatusRead)
 def get_status(_: User = Depends(require_any_role)) -> AIStatusRead:
     settings = get_settings()
-    configured = settings.AI_PROVIDER == "cloud" and bool(settings.ANTHROPIC_API_KEY)
-    return AIStatusRead(provider=settings.AI_PROVIDER, configured=configured)
+    provider_name = (settings.AI_PROVIDER or "").lower()
+    if provider_name in {"none", "mock"}:
+        provider_name = "none"
+    configured = provider_name == "cloud" and bool(settings.ANTHROPIC_API_KEY)
+    return AIStatusRead(provider=provider_name, configured=configured)
 
 
 @router.post("/alerts/{alert_id}/explain", response_model=AIQueryLogRead)

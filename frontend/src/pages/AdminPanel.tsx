@@ -17,6 +17,7 @@ import {
   setUserActive,
   updateUserRole,
 } from "../services/users";
+import { getScanRanges, updateScanRanges } from "../services/admin";
 
 const ROLES: Role[] = ["admin", "security_analyst", "network_administrator", "viewer"];
 
@@ -27,6 +28,8 @@ export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>("users");
 
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [scanRanges, setScanRanges] = useState<string[]>([]);
+  const [rangeDraft, setRangeDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -45,9 +48,12 @@ export default function AdminPanel() {
   async function load() {
     setError(null);
     try {
-      setUsers(await listUsers());
+      const [usersData, rangesData] = await Promise.all([listUsers(), getScanRanges()]);
+      setUsers(usersData);
+      setScanRanges(rangesData.ranges);
+      setRangeDraft(rangesData.ranges.join(", "));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load users.");
+      setError(err instanceof ApiError ? err.message : "Failed to load admin settings.");
     }
   }
 
@@ -138,6 +144,24 @@ export default function AdminPanel() {
     }
   }
 
+  async function handleSaveScanRanges(e: React.FormEvent) {
+    e.preventDefault();
+    const nextRanges = rangeDraft
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    setError(null);
+    try {
+      const updated = await updateScanRanges(nextRanges);
+      setScanRanges(updated.ranges);
+      setRangeDraft(updated.ranges.join(", "));
+      setNotice("Authorized scan ranges updated.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update scan ranges.");
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -167,6 +191,25 @@ export default function AdminPanel() {
 
         {tab === "users" ? (
           <>
+            <Card className="p-4">
+              <h2 className="text-sm font-medium text-vexus-muted mb-3">Authorized scan ranges</h2>
+              <form onSubmit={handleSaveScanRanges} className="space-y-3">
+                <Field label="CIDR ranges (comma-separated)">
+                  <Input
+                    value={rangeDraft}
+                    onChange={(e) => setRangeDraft(e.target.value)}
+                    placeholder="10.0.0.0/8, 192.168.1.0/24"
+                  />
+                </Field>
+                <div className="flex items-center gap-2">
+                  <Button type="submit">Save ranges</Button>
+                  <span className="text-[11px] text-vexus-muted">
+                    {scanRanges.length ? scanRanges.join(", ") : "No ranges configured"}
+                  </span>
+                </div>
+              </form>
+            </Card>
+
             <Card className="p-4">
               <h2 className="text-sm font-medium text-vexus-muted mb-3">Create user</h2>
               <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">

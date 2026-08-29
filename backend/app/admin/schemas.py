@@ -86,6 +86,14 @@ class SettingsUpdate(BaseModel):
     lockout_duration_minutes: Optional[int] = None
 
 
+class ScanRangesUpdate(BaseModel):
+    ranges: List[str] = Field(default_factory=list)
+
+
+class ScanRangesResponse(BaseModel):
+    ranges: List[str] = Field(default_factory=list)
+
+
 # Stats schemas
 class SystemStats(BaseModel):
     total_users: int

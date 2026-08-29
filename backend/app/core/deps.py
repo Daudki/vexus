@@ -57,20 +57,12 @@ def get_current_user(
     return user
 
 
-def require_role(role: RoleName):
-    """Dependency factory for role-based access control."""
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role.name != role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires role: {role.value}",
-            )
-        return current_user
-    return dependency
+def require_role(*roles: RoleName):
+    """Dependency factory for role-based access control.
 
-
-def require_any_role(roles: list[RoleName]):
-    """Dependency factory for multiple roles."""
+    Accepts one or more allowed roles; the current user must hold one
+    of them.
+    """
     def dependency(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role.name not in roles:
             raise HTTPException(
@@ -79,6 +71,16 @@ def require_any_role(roles: list[RoleName]):
             )
         return current_user
     return dependency
+
+
+def require_any_role(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency requiring any authenticated, active user (any role).
+
+    Used directly as `Depends(require_any_role)` throughout the routers
+    for endpoints open to every role, as opposed to `require_role(...)`
+    which restricts access to specific roles.
+    """
+    return current_user
 
 
 def get_current_user_optional(

@@ -32,10 +32,3 @@ class TimestampMixin:
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
-
-"""
-Database base for SQLAlchemy models.
-"""
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()

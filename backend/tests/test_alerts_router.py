@@ -87,13 +87,39 @@ def test_alert_can_be_assigned_to_a_user(client, db_session):
     alert = _seed_alert(db_session)
     token = _create_and_login(client, db_session, "analyst1", RoleName.SECURITY_ANALYST)
 
+    # Assigning an alert to a real user, since the API validates that
+    # `assigned_to` refers to an existing user (a plain string ID with
+    # no matching user is correctly rejected with 400 -- see
+    # test_assigning_alert_to_unknown_user_returns_400 below).
+    target_role = db_session.query(Role).filter_by(name=RoleName.SECURITY_ANALYST).first()
+    target = User(
+        username="assignee1",
+        email="assignee1@vexus.local",
+        password_hash=hash_password("Password123!"),
+        role_id=target_role.id,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    resp = client.patch(
+        f"/api/v1/alerts/{alert.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"assigned_to": target.id},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["assigned_to"] == target.id
+
+
+def test_assigning_alert_to_unknown_user_returns_400(client, db_session):
+    alert = _seed_alert(db_session)
+    token = _create_and_login(client, db_session, "analyst1", RoleName.SECURITY_ANALYST)
+
     resp = client.patch(
         f"/api/v1/alerts/{alert.id}",
         headers={"Authorization": f"Bearer {token}"},
         json={"assigned_to": "some-user-id"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["assigned_to"] == "some-user-id"
+    assert resp.status_code == 400
 
 
 def test_filter_alerts_by_status(client, db_session):

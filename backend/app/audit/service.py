@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 
@@ -20,16 +19,23 @@ class AuditService:
         ip_address: Optional[str] = None,
         success: bool = True,
     ) -> AuditLog:
-        """Record an audit entry."""
+        """Record an audit entry.
+
+        `actor` may be None (e.g. a failed login for a username that
+        doesn't exist). `target_type`/`target_id`/`detail`/`ip_address`
+        are NOT NULL in the schema, so sensible defaults are used when
+        the caller doesn't have a specific target (e.g. a login event).
+        """
         log = AuditLog(
+            actor_user_id=actor.id if actor else None,
+            actor_username=actor.username if actor else "unknown",
             action=action,
-            user_id=actor.id if actor else None,
-            resource_type=target_type,
-            resource_id=target_id,
-            details={"detail": detail, "success": success} if detail else {"success": success},
-            ip_address=ip_address,
-            timestamp=datetime.utcnow(),
+            target_type=target_type or "none",
+            target_id=target_id or "",
+            detail=detail or "",
+            ip_address=ip_address or "",
+            success=success,
         )
         self.db.add(log)
-        self.db.flush()
+        self.db.commit()
         return log

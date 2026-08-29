@@ -34,6 +34,12 @@ const PALETTE: Record<string, string> = {
 
   // severity
   informational: "text-vexus-muted bg-vexus-bg border-vexus-border",
+
+  // user roles
+  admin: "text-red-400 bg-red-950/40 border-red-900",
+  security_analyst: "text-blue-400 bg-blue-950/40 border-blue-900",
+  network_administrator: "text-purple-400 bg-purple-950/40 border-purple-900",
+  viewer: "text-vexus-muted bg-vexus-bg border-vexus-border",
 };
 
 const DEFAULT = "text-vexus-muted bg-vexus-bg border-vexus-border";

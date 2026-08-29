@@ -1,20 +1,24 @@
-"""
-VEXUS backend entrypoint.
-
-Application-factory pattern: each domain module owns its own APIRouter
-and is registered here. Routers contain no business logic — see each
-module's service.py for that.
-"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.auth.router import router as auth_router
+from app.auth.router import router as auth_router, limiter as auth_limiter
 from app.config.settings import get_settings
 from app.database.base import Base
 from app.database.session import engine
-from app.health.router import router as health_router  # ADD THIS
+from app.health.router import router as health_router
+from app.users.router import router as users_router
+from app.assets.router import router as assets_router
+from app.discovery.router import router as discovery_router
+from app.monitoring.router import router as monitoring_router
+from app.topology.router import router as topology_router
+from app.detection.router import router as detection_router
+from app.alerts.router import router as alerts_router
+from app.risk.router import router as risk_router
+from app.incidents.router import router as incidents_router
+from app.ai.router import router as ai_router
+from app.audit.router import router as audit_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -44,9 +48,9 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    # Rate limiting - remove this if auth.router doesn't have limiter yet
-    # app.state.limiter = auth_limiter
-    # app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # Rate limiting
+    app.state.limiter = auth_limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -57,18 +61,19 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
-    app.include_router(health_router)      # ✅ Health router
-    app.include_router(auth_router)        # ✅ Auth router
-    # app.include_router(users_router)     # Uncomment when users router exists
-    # app.include_router(assets_router)    # Uncomment when assets router exists
-    # app.include_router(discovery_router)
-    # app.include_router(monitoring_router)
-    # app.include_router(topology_router)
-    # app.include_router(detection_router)
-    # app.include_router(alerts_router)
-    # app.include_router(risk_router)
-    # app.include_router(incidents_router)
-    # app.include_router(ai_router)
+    app.include_router(health_router)
+    app.include_router(auth_router)
+    app.include_router(users_router)
+    app.include_router(assets_router)
+    app.include_router(discovery_router)
+    app.include_router(monitoring_router)
+    app.include_router(topology_router)
+    app.include_router(detection_router)
+    app.include_router(alerts_router)
+    app.include_router(risk_router)
+    app.include_router(incidents_router)
+    app.include_router(ai_router)
+    app.include_router(audit_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

@@ -48,6 +48,14 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span className="text-xs text-vexus-muted">
               {user?.username} · {user?.role.replace("_", " ")}
             </span>
+            {user?.role === "admin" && (
+              <button
+                onClick={() => navigate("/admin")}
+                className="text-xs text-red-400 hover:text-red-300 border border-red-900 rounded px-2.5 py-1.5"
+              >
+                Admin Panel
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="text-xs text-vexus-muted hover:text-vexus-text border border-vexus-border rounded px-2.5 py-1.5"

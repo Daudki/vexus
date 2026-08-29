@@ -9,6 +9,7 @@ from app.core.deps import require_any_role, require_role
 from app.database.session import get_db
 from app.events.models import EventSeverity
 from app.users.models import RoleName, User
+from app.users.repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
@@ -51,6 +52,9 @@ def update_alert(
     alert = repo.get_by_id(alert_id)
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found.")
+
+    if payload.assigned_to is not None and UserRepository(db).get_by_id(payload.assigned_to) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assigned user not found.")
 
     return AlertService(db).update_status(
         alert,

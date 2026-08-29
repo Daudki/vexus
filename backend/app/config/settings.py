@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Optional, List, Union
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     AUTHORIZED_SCAN_RANGES: Union[List[str], str, None] = None
     
     # AI Configuration
-    AI_PROVIDER: str = "mock"
+    AI_PROVIDER: str = "none"
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
     CLOUD_AI_PROVIDER: str = "anthropic"
@@ -101,7 +102,8 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# ADD THIS FUNCTION - used by database/session.py
+@lru_cache()
 def get_settings() -> Settings:
-    """Get the settings instance."""
-    return settings
+    """Get the settings instance (cached; tests call .cache_clear() after
+    changing environment variables via monkeypatch)."""
+    return Settings()

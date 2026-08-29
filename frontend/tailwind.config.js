@@ -4,8 +4,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Muted SOC-style palette — deliberately low-saturation so
-        // alert severity colors (used sparingly) stand out.
         vexus: {
           bg: "#0b0f14",
           panel: "#121822",

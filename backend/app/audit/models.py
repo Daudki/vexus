@@ -1,27 +1,28 @@
-from datetime import datetime
-import uuid
+"""
+Audit log model.
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, JSON, Index
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+Column names and types mirror the initial alembic migration exactly
+(`actor_user_id`, `actor_username`, `target_type`, `target_id`,
+`detail`, `ip_address`, `success`) -- see
+alembic/versions/273f1f1a6fc9_initial_schema.py.
+"""
+from sqlalchemy import Boolean, Column, ForeignKey, Index, String
 
-from app.database.base import Base
+from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
-class AuditLog(Base):
+class AuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "audit_logs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    action = Column(String(50), nullable=False)
-    resource_type = Column(String(50), nullable=True)
-    resource_id = Column(String(255), nullable=True)
-    details = Column(JSON, nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    actor_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    actor_username = Column(String(64), nullable=False)
+    action = Column(String(64), nullable=False, index=True)
+    target_type = Column(String(64), nullable=False)
+    target_id = Column(String(64), nullable=False)
+    detail = Column(String(1024), nullable=False)
+    ip_address = Column(String(64), nullable=False)
+    success = Column(Boolean, nullable=False)
 
     __table_args__ = (
-        Index("ix_audit_logs_timestamp", "timestamp"),
-        Index("ix_audit_logs_action", "action"),
-        Index("ix_audit_logs_user_id", "user_id"),
+        Index("ix_audit_logs_target", "target_type", "target_id"),
     )

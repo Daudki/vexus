@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Admin User
     VEXUS_ADMIN_USERNAME: str = "admin"
     VEXUS_ADMIN_EMAIL: str = "admin@vexus.local"
-    VEXUS_ADMIN_PASSWORD: str = "AdminPassword123!"
+    VEXUS_ADMIN_PASSWORD: Optional[str] = None
     
     @property
     def cors_origins_list(self) -> List[str]:

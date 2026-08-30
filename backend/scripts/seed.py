@@ -7,6 +7,7 @@ Run with: python -m scripts.seed
 """
 import os
 import sys
+import secrets
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -64,11 +65,11 @@ def run() -> None:
         # 3. Create admin user
         admin_username = os.getenv("VEXUS_ADMIN_USERNAME", "admin")
         admin_email = os.getenv("VEXUS_ADMIN_EMAIL", "admin@vexus.local")
-        admin_password = os.getenv("VEXUS_ADMIN_PASSWORD", "AdminPassword123!")
+        admin_password = os.getenv("VEXUS_ADMIN_PASSWORD")
 
         # Check if user exists
         existing_user = db.query(User).filter_by(username=admin_username).first()
-        
+
         if existing_user:
             print(f"ℹ️ Admin user '{admin_username}' already exists.")
             # Ensure role is correct
@@ -79,6 +80,18 @@ def run() -> None:
             else:
                 print(f"ℹ️ Role already correct for {admin_username}")
         else:
+            if not admin_password:
+                # No hardcoded fallback: shipping a known default password
+                # in a security product is itself a vulnerability. Generate
+                # a random one so a forgotten env var fails safe instead of
+                # producing a predictable admin account.
+                admin_password = secrets.token_urlsafe(16)
+                print(
+                    "⚠️  VEXUS_ADMIN_PASSWORD was not set. Generated a random "
+                    "password for this admin account (shown once below) — "
+                    "set VEXUS_ADMIN_PASSWORD explicitly to control it yourself."
+                )
+
             # Create new admin user
             user = User(
                 username=admin_username,

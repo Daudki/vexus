@@ -3,7 +3,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.ai.models import AIQueryLog
-from app.ai.provider import AIProvider, AnthropicProvider, NullProvider
+from app.ai.provider import AIProvider, AnthropicProvider, DeepSeekProvider, NullProvider
 from app.ai.schemas import AIQueryLogRead, AIStatusRead, AskRequest
 from app.ai.service import AIService, AIServiceError
 from app.config.settings import get_settings
@@ -25,6 +25,8 @@ def get_ai_provider() -> AIProvider:
         return NullProvider()
     if provider_name == "cloud" and settings.ANTHROPIC_API_KEY:
         return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY, model=settings.CLOUD_AI_MODEL)
+    if provider_name == "deepseek" and settings.DEEPSEEK_API_KEY:
+        return DeepSeekProvider(api_key=settings.DEEPSEEK_API_KEY, model=settings.DEEPSEEK_MODEL)
     return NullProvider()
 
 
@@ -32,9 +34,13 @@ def get_ai_provider() -> AIProvider:
 def get_status(_: User = Depends(require_any_role)) -> AIStatusRead:
     settings = get_settings()
     provider_name = (settings.AI_PROVIDER or "").lower()
-    if provider_name in {"none", "mock"}:
+    if provider_name == "cloud":
+        configured = bool(settings.ANTHROPIC_API_KEY)
+    elif provider_name == "deepseek":
+        configured = bool(settings.DEEPSEEK_API_KEY)
+    else:
         provider_name = "none"
-    configured = provider_name == "cloud" and bool(settings.ANTHROPIC_API_KEY)
+        configured = False
     return AIStatusRead(provider=provider_name, configured=configured)
 
 

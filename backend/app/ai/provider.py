@@ -133,3 +133,81 @@ class AnthropicProvider:
             raise AIProviderError(f"Anthropic API request failed: {exc}") from exc
 
         return parse_anthropic_response(response.json())
+
+
+def build_deepseek_request(system_prompt: str, user_prompt: str, model: str, max_tokens: int = 1024) -> dict:
+    """Pure function — no network call, fully testable.
+
+    DeepSeek's API is OpenAI-compatible (chat completions shape), so
+    the request body differs from Anthropic's even though both are
+    asked to return the same AIResponse-shaped JSON.
+    """
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": f"{system_prompt}\n\n{RESPONSE_SCHEMA_INSTRUCTIONS}"},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+    }
+
+
+def parse_deepseek_response(raw: dict) -> AIResponse:
+    """Pure function — testable against a canned API response, no network call."""
+    try:
+        text = raw["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise AIProviderError(f"Unexpected DeepSeek API response shape: {exc}") from exc
+
+    if not text:
+        raise AIProviderError("DeepSeek API response contained no text content.")
+
+    # DeepSeek sometimes wraps JSON in markdown code fences despite
+    # being asked not to; strip them before parsing.
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        if stripped.startswith("json"):
+            stripped = stripped[4:]
+        stripped = stripped.strip()
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        raise AIProviderError(f"AI response was not valid JSON: {exc}") from exc
+
+    try:
+        return AIResponse(**parsed)
+    except ValidationError as exc:
+        raise AIProviderError(f"AI response did not match the required schema: {exc}") from exc
+
+
+class DeepSeekProvider:
+    """DeepSeek implementation of the same AIProvider protocol used by
+    AnthropicProvider. Not exercised against a real API key in this
+    environment — verify before relying on it in production."""
+
+    def __init__(self, api_key: str, model: str = "deepseek-chat", timeout_seconds: float = 60.0):
+        self.api_key = api_key
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    def generate(self, system_prompt: str, user_prompt: str) -> AIResponse:
+        payload = build_deepseek_request(system_prompt, user_prompt, self.model)
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = httpx.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f"DeepSeek API request failed: {exc}") from exc
+
+        return parse_deepseek_response(response.json())

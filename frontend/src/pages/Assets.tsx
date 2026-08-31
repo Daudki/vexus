@@ -106,8 +106,8 @@ export default function Assets() {
           <table className="w-full text-sm">
             <thead className="text-xs text-vexus-muted border-b border-vexus-border">
               <tr>
-                <th className="text-left px-4 py-2">Hostname</th>
-                <th className="text-left px-4 py-2">IP address</th>
+                <th className="text-left px-4 py-2">Device</th>
+                <th className="text-left px-4 py-2">Network identity</th>
                 <th className="text-left px-4 py-2">Status</th>
                 <th className="text-left px-4 py-2">Trust</th>
                 <th className="text-left px-4 py-2">Criticality</th>
@@ -135,8 +135,16 @@ export default function Assets() {
                   onClick={() => navigate(`/assets/${asset.id}`)}
                   className="border-b border-vexus-border last:border-0 cursor-pointer hover:bg-vexus-border/20"
                 >
-                  <td className="px-4 py-2">{asset.hostname || <span className="text-vexus-muted">—</span>}</td>
-                  <td className="px-4 py-2 text-vexus-muted">{asset.ip_address || "—"}</td>
+                  <td className="px-4 py-2">
+                    <div className="font-medium text-vexus-text">{asset.display_name}</div>
+                    {asset.hostname && asset.hostname !== asset.display_name && (
+                      <div className="text-[11px] text-vexus-muted">{asset.hostname}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-vexus-muted">
+                    <div>{asset.ip_address || "—"}</div>
+                    {asset.mac_address && <div className="text-[11px] text-vexus-muted">{asset.mac_address}</div>}
+                  </td>
                   <td className="px-4 py-2">
                     <Badge value={asset.status} />
                   </td>

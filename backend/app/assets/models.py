@@ -44,6 +44,10 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_seen: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)  # populated by the Risk module (Phase 6)
 
+    @property
+    def display_name(self) -> str:
+        return self.hostname or self.ip_address or self.mac_address or self.id
+
 
 class AssetChangeType(str, enum.Enum):
     FIRST_DISCOVERED = "first_discovered"

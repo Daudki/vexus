@@ -22,6 +22,14 @@ class AssetRead(BaseModel):
     first_seen: datetime
     last_seen: datetime
     risk_score: float
+    display_name: str
+
+    @classmethod
+    def from_attributes(cls, obj):
+        data = cls.model_validate(obj, from_attributes=True)
+        if not data.display_name:
+            data.display_name = obj.hostname or obj.ip_address or obj.mac_address or obj.id
+        return data
 
 
 class AssetUpdate(BaseModel):

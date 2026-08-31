@@ -141,7 +141,7 @@ export default function AssetDetail() {
               ← Back to assets
             </button>
             <h1 className="text-lg font-semibold tracking-tight">
-              {asset.hostname || asset.ip_address || asset.id}
+              {asset.display_name || asset.hostname || asset.ip_address || asset.id}
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge value={asset.status} />

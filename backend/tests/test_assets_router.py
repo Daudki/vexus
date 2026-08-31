@@ -116,6 +116,15 @@ def test_unknown_asset_is_not_flagged_untrusted_by_default(client, db_session):
     assert resp.json()[0]["trust_status"] == "unknown"
 
 
+def test_asset_display_name_falls_back_to_ip_when_hostname_missing(client, db_session):
+    _seed_asset(db_session, hostname=None, ip_address="10.0.0.77")
+    token = _create_and_login(client, db_session, "viewer1", RoleName.VIEWER)
+
+    resp = client.get("/api/v1/assets", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.json()[0]["display_name"] == "10.0.0.77"
+
+
 def test_get_nonexistent_asset_returns_404(client, db_session):
     token = _create_and_login(client, db_session, "viewer1", RoleName.VIEWER)
     resp = client.get("/api/v1/assets/does-not-exist", headers={"Authorization": f"Bearer {token}"})

@@ -15,6 +15,7 @@ export interface Asset {
   first_seen: string;
   last_seen: string;
   risk_score: number;
+  display_name: string;
 }
 
 export interface AssetHistoryEntry {

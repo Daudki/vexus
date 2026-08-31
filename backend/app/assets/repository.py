@@ -40,9 +40,19 @@ class AssetRepository:
 
         if search:
             like = f"%{search}%"
-            query = query.where(or_(Asset.hostname.ilike(like), Asset.ip_address.ilike(like)))
-        if status:
+            query = query.where(
+                or_(
+                    Asset.hostname.ilike(like),
+                    Asset.ip_address.ilike(like),
+                    Asset.mac_address.ilike(like),
+                    Asset.device_type.ilike(like),
+                    Asset.vendor.ilike(like),
+                )
+            )
+        if status is not None:
             query = query.where(Asset.status == status)
+        elif status is None:
+            query = query.where(Asset.status != AssetStatus.OFFLINE)
         if trust_status:
             query = query.where(Asset.trust_status == trust_status)
         if criticality:

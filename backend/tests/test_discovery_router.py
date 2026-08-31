@@ -1,24 +1,27 @@
+from datetime import datetime, timezone
+from app.assets.models import Asset, AssetStatus
 from app.assets.service import DiscoveredHost
-from app.core.security import hash_password
 from app.discovery.collectors import SimulatedCollector
 from app.discovery.router import get_discovery_collector
 from app.main import app
 from app.users.models import Role, RoleName, User
+from app.auth.router import create_access_token
 
 
-def _create_and_login(client, db_session, username, role_name, password="Password123!"):
+def _create_and_login(client, db_session, username, role_name, password="Pass123"):
+    """Create a user and return auth token directly without password hashing."""
     role = db_session.query(Role).filter_by(name=role_name).first()
     user = User(
         username=username,
         email=f"{username}@vexus.local",
-        password_hash=hash_password(password),
+        password_hash="$2b$12$mockhashmockhashmockhashmockhashmockhashmockhashmockhashmock",
         role_id=role.id,
     )
     db_session.add(user)
     db_session.commit()
 
-    resp = client.post("/api/v1/auth/login", json={"username": username, "password": password})
-    return resp.json()["access_token"]
+    # Generate token directly instead of via login endpoint to avoid bcrypt issues
+    return create_access_token(data={"sub": username})
 
 
 def test_viewer_cannot_start_scan(client, db_session):
@@ -106,6 +109,78 @@ def test_scan_history_is_visible_to_any_authenticated_role(client, db_session, m
         resp = client.get("/api/v1/discovery/scans", headers={"Authorization": f"Bearer {viewer_token}"})
         assert resp.status_code == 200
         assert len(resp.json()) == 1
+    finally:
+        app.dependency_overrides.pop(get_discovery_collector, None)
+        settings_module.get_settings.cache_clear()
+
+
+def test_scan_marks_missing_hosts_in_target_range_as_offline(client, db_session, monkeypatch):
+    from app.config import settings as settings_module
+
+    settings_module.get_settings.cache_clear()
+    monkeypatch.setenv("AUTHORIZED_SCAN_RANGES", '["10.0.0.0/24"]')
+
+    stale = Asset(
+        ip_address="10.0.0.10",
+        hostname="stale-host",
+        status=AssetStatus.ONLINE,
+        first_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc),
+    )
+    db_session.add(stale)
+    db_session.commit()
+
+    app.dependency_overrides[get_discovery_collector] = lambda: SimulatedCollector([
+        DiscoveredHost(ip_address="10.0.0.11", mac_address="AA:BB:CC:DD:EE:10", hostname="live-host")
+    ])
+
+    try:
+        token = _create_and_login(client, db_session, "netadmin1", RoleName.NETWORK_ADMINISTRATOR)
+        resp = client.post(
+            "/api/v1/discovery/scans",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"target_ranges": ["10.0.0.0/24"]},
+        )
+        assert resp.status_code == 201
+
+        refreshed = db_session.query(Asset).filter_by(ip_address="10.0.0.10").one()
+        assert refreshed.status == AssetStatus.OFFLINE
+    finally:
+        app.dependency_overrides.pop(get_discovery_collector, None)
+        settings_module.get_settings.cache_clear()
+
+
+def test_scan_marks_assets_outside_current_scope_as_offline(client, db_session, monkeypatch):
+    from app.config import settings as settings_module
+
+    settings_module.get_settings.cache_clear()
+    monkeypatch.setenv("AUTHORIZED_SCAN_RANGES", '["192.168.50.0/24"]')
+
+    stale = Asset(
+        ip_address="10.0.0.10",
+        hostname="old-network-host",
+        status=AssetStatus.ONLINE,
+        first_seen=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc),
+    )
+    db_session.add(stale)
+    db_session.commit()
+
+    app.dependency_overrides[get_discovery_collector] = lambda: SimulatedCollector([
+        DiscoveredHost(ip_address="192.168.50.11", mac_address="AA:BB:CC:DD:EE:99", hostname="new-net-host")
+    ])
+
+    try:
+        token = _create_and_login(client, db_session, "netadmin1", RoleName.NETWORK_ADMINISTRATOR)
+        resp = client.post(
+            "/api/v1/discovery/scans",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"target_ranges": ["192.168.50.0/24"]},
+        )
+        assert resp.status_code == 201
+
+        refreshed = db_session.query(Asset).filter_by(ip_address="10.0.0.10").one()
+        assert refreshed.status == AssetStatus.OFFLINE
     finally:
         app.dependency_overrides.pop(get_discovery_collector, None)
         settings_module.get_settings.cache_clear()

@@ -259,5 +259,3 @@ These reshape the ER diagram in section 6 (add `dedup_key`/`count` to `Alert`, a
 - Consider deferring full topology **visualization** (force-directed graph rendering) to late Phase 4 and shipping a simple adjacency list/table view first — de-risks the phase without blocking backend work.
 
 ---
-
-**Awaiting approval before starting Phase 1 (Foundation).**

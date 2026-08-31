@@ -411,32 +411,36 @@ function AuditLogPanel() {
       )}
 
       <Card className="p-4">
-        <form onSubmit={handleFilter} className="flex items-end gap-3">
-          <Field label="Filter by action (e.g. user.delete, login)">
-            <Input
-              value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
-              placeholder="Leave blank to show everything"
-            />
-          </Field>
-          <Button type="submit">Filter</Button>
-          {actionFilter && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setActionFilter("");
-                load();
-              }}
-            >
-              Clear
-            </Button>
-          )}
+        <form onSubmit={handleFilter} className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1 min-w-0">
+            <Field label="Filter by action (e.g. user.delete, login)">
+              <Input
+                value={actionFilter}
+                onChange={(e) => setActionFilter(e.target.value)}
+                placeholder="Leave blank to show everything"
+              />
+            </Field>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="submit">Filter</Button>
+            {actionFilter && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setActionFilter("");
+                  load();
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[860px] text-sm">
           <thead className="text-xs text-vexus-muted border-b border-vexus-border">
             <tr>
               <th className="text-left px-4 py-2">Time</th>
@@ -477,10 +481,10 @@ function AuditLogPanel() {
                   {e.target_type}
                   {e.target_id ? `:${e.target_id.slice(0, 8)}` : ""}
                 </td>
-                <td className="px-4 py-2 text-xs text-vexus-muted max-w-xs truncate" title={e.detail}>
+                <td className="px-4 py-2 text-xs text-vexus-muted max-w-[18rem] break-words" title={e.detail}>
                   {e.detail}
                 </td>
-                <td className="px-4 py-2 text-xs text-vexus-muted">{e.ip_address}</td>
+                <td className="px-4 py-2 text-xs text-vexus-muted whitespace-nowrap">{e.ip_address}</td>
                 <td className="px-4 py-2">
                   <Badge value={e.success ? "trusted" : "untrusted"} />
                 </td>

@@ -20,6 +20,7 @@ from app.incidents.router import router as incidents_router
 from app.ai.router import router as ai_router
 from app.audit.router import router as audit_router
 from app.admin.router import router as admin_router
+from app.sense.router import router as sense_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -38,6 +39,7 @@ from app.topology import models as _topology_models  # noqa: F401
 from app.risk import models as _risk_models  # noqa: F401
 from app.incidents import models as _incidents_models  # noqa: F401
 from app.ai import models as _ai_models  # noqa: F401
+from app.sense import models as _sense_models  # noqa: F401
 
 
 def create_app() -> FastAPI:
@@ -76,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router)
     app.include_router(audit_router)
     app.include_router(admin_router)
+    app.include_router(sense_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

@@ -1,23 +1,30 @@
 from functools import lru_cache
 from typing import Optional, List, Union
-from pydantic_settings import BaseSettings
 from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application configuration."""
-    
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
     # Application
     APP_NAME: str = "VEXUS"
     APP_ENV: str = "development"
     DEBUG: bool = True
-    SECRET_KEY: str
+    SECRET_KEY: str = "dev-secret-key-change-me"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
+
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./vexus.db"
     POSTGRES_PASSWORD: Optional[str] = None
     
     # Redis
@@ -90,12 +97,6 @@ class Settings(BaseSettings):
         if isinstance(self.AUTHORIZED_SCAN_RANGES, list):
             return self.AUTHORIZED_SCAN_RANGES
         return []
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"
 
 
 # Create a global settings instance

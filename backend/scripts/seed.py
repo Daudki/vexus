@@ -63,8 +63,8 @@ def run() -> None:
         print(f"✅ Admin role ID: {admin_role.id}")
 
         # 3. Create admin user
-        admin_username = os.getenv("VEXUS_ADMIN_USERNAME", "admin")
-        admin_email = os.getenv("VEXUS_ADMIN_EMAIL", "admin@vexus.local")
+        admin_username = os.getenv("VEXUS_ADMIN_USERNAME")
+        admin_email = os.getenv("VEXUS_ADMIN_EMAIL")
         admin_password = os.getenv("VEXUS_ADMIN_PASSWORD")
 
         # Check if user exists

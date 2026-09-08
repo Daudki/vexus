@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from ipaddress import ip_address
 
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,7 @@ class AssetService:
     # --- Discovery ingestion ---
 
     def upsert_from_discovery(self, host: DiscoveredHost, *, source: str = "discovery") -> UpsertResult:
+        host = self._normalize_host(host)
         now = datetime.now(timezone.utc)
 
         # Prefer MAC as the stable identity key (IP can rotate via DHCP);
@@ -160,6 +162,27 @@ class AssetService:
         )
 
         return UpsertResult(asset=updated, is_new=False, changes=changes)
+
+    @staticmethod
+    def _normalize_host(host: DiscoveredHost) -> DiscoveredHost:
+        """Normalize identifiers before identity matching and persistence."""
+        normalized_ip = host.ip_address.strip()
+        try:
+            normalized_ip = ip_address(normalized_ip).compressed
+        except ValueError:
+            pass
+
+        normalized_mac = host.mac_address.strip().lower().replace("-", ":") if host.mac_address else None
+        normalized_hostname = host.hostname.strip().rstrip(".").lower() if host.hostname else None
+
+        return DiscoveredHost(
+            ip_address=normalized_ip,
+            mac_address=normalized_mac,
+            hostname=normalized_hostname,
+            operating_system=host.operating_system.strip() if host.operating_system else None,
+            vendor=host.vendor.strip() if host.vendor else None,
+            open_ports=host.open_ports,
+        )
 
     # --- Analyst-facing operations ---
 

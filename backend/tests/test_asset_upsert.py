@@ -77,3 +77,26 @@ def test_matches_existing_asset_by_ip_when_no_mac_available(db_session):
 
     assert second.is_new is False
     assert second.asset.id == first.asset.id
+
+
+def test_equivalent_discovery_identifiers_do_not_create_changes(db_session):
+    service = AssetService(db_session)
+    first = service.upsert_from_discovery(
+        DiscoveredHost(
+            ip_address=" 10.0.0.11 ",
+            mac_address="AA-BB-CC-DD-EE-06",
+            hostname="Host-A.",
+        )
+    )
+    second = service.upsert_from_discovery(
+        DiscoveredHost(
+            ip_address="10.0.0.11",
+            mac_address="aa:bb:cc:dd:ee:06",
+            hostname="host-a",
+        )
+    )
+
+    assert second.asset.id == first.asset.id
+    assert second.changes == []
+    assert second.asset.mac_address == "aa:bb:cc:dd:ee:06"
+    assert second.asset.hostname == "host-a"

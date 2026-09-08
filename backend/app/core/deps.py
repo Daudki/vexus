@@ -41,7 +41,11 @@ def get_current_user(
             detail="Invalid token payload",
         )
     
-    user = UserRepository(db).get_by_id(user_id)
+    repository = UserRepository(db)
+    user = repository.get_by_id(user_id)
+    if not user:
+        # Accept legacy tokens whose subject contains the username.
+        user = repository.get_by_username(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -100,7 +104,10 @@ def get_current_user_optional(
     if not user_id:
         return None
     
-    user = UserRepository(db).get_by_id(user_id)
+    repository = UserRepository(db)
+    user = repository.get_by_id(user_id)
+    if not user:
+        user = repository.get_by_username(user_id)
     if not user or not user.is_active:
         return None
     

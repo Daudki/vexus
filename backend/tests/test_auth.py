@@ -35,6 +35,12 @@ def test_successful_login_returns_token_pair(client, db_session):
     assert "access_token" in body and "refresh_token" in body
 
 
+def test_successful_login_accepts_email(client, db_session):
+    _create_user(db_session)
+    resp = client.post("/api/v1/auth/login", json={"username": "admin1@vexus.local", "password": "AdminPass123!"})
+    assert resp.status_code == 200
+
+
 def test_me_requires_authentication(client):
     resp = client.get("/api/v1/auth/me")
     assert resp.status_code == 401

@@ -11,7 +11,8 @@ import secrets
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.core.security import hash_password  # noqa: E402
+from app.core.security import hash_password, verify_password  # noqa: E402
+from app.config.settings import get_settings  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import SessionLocal, engine  # noqa: E402
 from app.users.models import Role, RoleName, User  # noqa: E402
@@ -63,9 +64,10 @@ def run() -> None:
         print(f"✅ Admin role ID: {admin_role.id}")
 
         # 3. Create admin user
-        admin_username = os.getenv("VEXUS_ADMIN_USERNAME")
-        admin_email = os.getenv("VEXUS_ADMIN_EMAIL")
-        admin_password = os.getenv("VEXUS_ADMIN_PASSWORD")
+        configured = get_settings()
+        admin_username = configured.VEXUS_ADMIN_USERNAME
+        admin_email = configured.VEXUS_ADMIN_EMAIL
+        admin_password = configured.VEXUS_ADMIN_PASSWORD
 
         # Check if user exists
         existing_user = db.query(User).filter_by(username=admin_username).first()
@@ -75,10 +77,15 @@ def run() -> None:
             # Ensure role is correct
             if existing_user.role_id != admin_role.id:
                 existing_user.role_id = admin_role.id
-                db.commit()
                 print(f"✅ Updated role for {admin_username} to ADMIN")
             else:
                 print(f"ℹ️ Role already correct for {admin_username}")
+
+            if admin_password and not verify_password(admin_password, existing_user.password_hash):
+                existing_user.password_hash = hash_password(admin_password)
+                print(f"✅ Updated password for {admin_username}")
+
+            db.commit()
         else:
             if not admin_password:
                 # No hardcoded fallback: shipping a known default password

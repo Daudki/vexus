@@ -23,6 +23,8 @@ class AuthService:
 
     def authenticate(self, username: str, password: str, ip_address: str = "") -> User:
         user = self.users.get_by_username(username)
+        if user is None:
+            user = self.users.get_by_email(username)
 
         if user is None or not verify_password(password, user.password_hash):
             self.audit.record(

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AdminLayout from "../components/AdminLayout";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -18,10 +19,11 @@ import {
   updateUserRole,
 } from "../services/users";
 import { getScanRanges, updateScanRanges } from "../services/admin";
+import { Asset, listAssets, updateAsset } from "../services/assets";
 
 const ROLES: Role[] = ["admin", "security_analyst", "network_administrator", "viewer"];
 
-type Tab = "users" | "audit";
+type Tab = "users" | "devices" | "audit";
 
 export default function AdminPanel() {
   const { user: me } = useAuth();
@@ -175,6 +177,9 @@ export default function AdminPanel() {
           <div className="flex gap-2">
             <Button variant={tab === "users" ? "primary" : "secondary"} onClick={() => setTab("users")}>
               User management
+            </Button>
+            <Button variant={tab === "devices" ? "primary" : "secondary"} onClick={() => setTab("devices")}>
+              Devices
             </Button>
             <Button variant={tab === "audit" ? "primary" : "secondary"} onClick={() => setTab("audit")}>
               Audit log
@@ -372,11 +377,103 @@ export default function AdminPanel() {
               </div>
             )}
           </>
+        ) : tab === "devices" ? (
+          <DeviceManagementPanel />
         ) : (
           <AuditLogPanel />
         )}
       </div>
     </AdminLayout>
+  );
+}
+
+function DeviceManagementPanel() {
+  const navigate = useNavigate();
+  const [assets, setAssets] = useState<Asset[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      setAssets(await listAssets({ search: search.trim() || undefined, limit: 200, sort_by: "last_seen", sort_desc: true }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load devices.");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save(asset: Asset, field: "owner" | "device_type" | "criticality" | "trust_status", value: string) {
+    setBusyId(asset.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await updateAsset(asset.id, { [field]: value || null });
+      setNotice(`Updated ${asset.display_name || asset.ip_address || "device"}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update device.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="text-sm font-medium text-white">Device inventory control</h2>
+            <p className="mt-1 text-xs text-vexus-muted">Manage analyst context for observed devices. Network identity remains evidence-owned by discovery.</p>
+          </div>
+          <form onSubmit={(event) => { event.preventDefault(); load(); }} className="flex gap-2">
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search hostname or IP" />
+            <Button type="submit">Search</Button>
+          </form>
+        </div>
+      </Card>
+
+      {error && <div className="rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</div>}
+      {notice && <div className="rounded border border-blue-900 bg-blue-950/40 px-3 py-2 text-sm text-blue-300">{notice}</div>}
+
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="border-b border-vexus-border text-xs text-vexus-muted">
+            <tr>
+              <th className="px-4 py-2 text-left">Device</th>
+              <th className="px-4 py-2 text-left">Observed</th>
+              <th className="px-4 py-2 text-left">Trust</th>
+              <th className="px-4 py-2 text-left">Criticality</th>
+              <th className="px-4 py-2 text-left">Owner</th>
+              <th className="px-4 py-2 text-left">Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {assets === null && <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-vexus-muted">Loading devices...</td></tr>}
+            {assets?.map((asset) => {
+              const busy = busyId === asset.id;
+              return (
+                <tr key={asset.id} className="border-b border-vexus-border last:border-0 align-top">
+                  <td className="px-4 py-3"><button type="button" onClick={() => navigate(`/assets/${asset.id}`)} className="text-left hover:text-vexus-accent"><div className="font-medium">{asset.display_name}</div><div className="mt-1 text-xs text-vexus-muted">{asset.id.slice(0, 8)}</div></button></td>
+                  <td className="px-4 py-3 text-xs text-vexus-muted"><div>{asset.ip_address || "No IP"}</div><div className="mt-1">{asset.status}</div></td>
+                  <td className="px-4 py-3"><Select value={asset.trust_status} disabled={busy} onChange={(event) => save(asset, "trust_status", event.target.value)} className="text-xs"><option value="trusted">Trusted</option><option value="unknown">Unknown</option><option value="untrusted">Untrusted</option></Select></td>
+                  <td className="px-4 py-3"><Select value={asset.criticality} disabled={busy} onChange={(event) => save(asset, "criticality", event.target.value)} className="text-xs"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></Select></td>
+                  <td className="px-4 py-3"><Input defaultValue={asset.owner || ""} disabled={busy} onBlur={(event) => { if (event.target.value !== (asset.owner || "")) save(asset, "owner", event.target.value); }} placeholder="Unassigned" className="text-xs" /></td>
+                  <td className="px-4 py-3"><Input defaultValue={asset.device_type || ""} disabled={busy} onBlur={(event) => { if (event.target.value !== (asset.device_type || "")) save(asset, "device_type", event.target.value); }} placeholder="Unknown" className="text-xs" /></td>
+                </tr>
+              );
+            })}
+            {assets?.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-vexus-muted">No devices match this search.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
   );
 }
 

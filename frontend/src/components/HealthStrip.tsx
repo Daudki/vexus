@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
+import { AIStatus, getAIStatus } from "../services/ai";
 
 interface PlatformStatus {
   database: string;
@@ -30,9 +31,15 @@ function label(name: string, status: string): string {
  */
 export default function HealthStrip() {
   const [status, setStatus] = useState<PlatformStatus | null>(null);
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
 
   useEffect(() => {
-    apiRequest<PlatformStatus>("/health/status").then(setStatus).catch(() => setStatus(null));
+    Promise.all([apiRequest<PlatformStatus>("/health/status"), getAIStatus()])
+      .then(([health, ai]) => {
+        setStatus(health);
+        setAIStatus(ai);
+      })
+      .catch(() => setStatus(null));
   }, []);
 
   if (!status) return null;
@@ -40,7 +47,11 @@ export default function HealthStrip() {
   const items = [
     label("database", status.database),
     ...Object.entries(status.workers).map(([name, s]) => label(name, s)),
-    label("ai provider", status.ai_provider),
+    aiStatus
+      ? aiStatus.configured
+        ? `🟢 AI ${aiStatus.provider}`
+        : "🟡 AI not configured"
+      : label("ai provider", status.ai_provider),
   ];
 
   return (

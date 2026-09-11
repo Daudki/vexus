@@ -3,7 +3,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.ai.models import AIQueryLog
-from app.ai.provider import AIProvider, AnthropicProvider, DeepSeekProvider, NullProvider
+from app.ai.provider import AIProvider, AnthropicProvider, DeepSeekProvider, NullProvider, OllamaProvider
 from app.ai.schemas import AIQueryLogRead, AIStatusRead, AskRequest
 from app.ai.service import AIService, AIServiceError
 from app.config.settings import get_settings
@@ -27,6 +27,12 @@ def get_ai_provider() -> AIProvider:
         return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY, model=settings.CLOUD_AI_MODEL)
     if provider_name == "deepseek" and settings.DEEPSEEK_API_KEY:
         return DeepSeekProvider(api_key=settings.DEEPSEEK_API_KEY, model=settings.DEEPSEEK_MODEL)
+    if provider_name == "local":
+        return OllamaProvider(
+            base_url=settings.LOCAL_AI_URL,
+            model=settings.LOCAL_AI_MODEL,
+            timeout_seconds=settings.LOCAL_AI_TIMEOUT_SECONDS,
+        )
     return NullProvider()
 
 
@@ -38,6 +44,8 @@ def get_status(_: User = Depends(require_any_role)) -> AIStatusRead:
         configured = bool(settings.ANTHROPIC_API_KEY)
     elif provider_name == "deepseek":
         configured = bool(settings.DEEPSEEK_API_KEY)
+    elif provider_name == "local":
+        configured = bool(settings.LOCAL_AI_URL and settings.LOCAL_AI_MODEL)
     else:
         provider_name = "none"
         configured = False

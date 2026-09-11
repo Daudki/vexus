@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Footer from "./Footer";
+import Brand from "./Brand";
 import { useAuth } from "../hooks/useAuth";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -21,7 +22,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <span className="rounded border border-red-900 px-2 py-0.5 text-[11px] font-semibold tracking-[0.2em] text-red-400 sm:text-xs">
                 ADMIN PANEL
               </span>
-              <span className="text-sm text-vexus-muted">VEXUS</span>
+              <Brand compact />
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <button

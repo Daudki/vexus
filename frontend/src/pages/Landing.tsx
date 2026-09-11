@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Footer from "../components/Footer";
+import Brand from "../components/Brand";
 
 const FEATURE_CARDS = [
   { title: "Asset visibility", detail: "Map every system, service, and dependency in one view." },
@@ -20,12 +21,7 @@ export default function Landing() {
     <div className="flex min-h-screen flex-col bg-vexus-bg text-vexus-text">
       <header className="sticky top-0 z-50 border-b border-vexus-border/80 bg-vexus-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md border border-vexus-accent/60 bg-vexus-accent/10 text-[10px] font-bold tracking-[0.24em] text-vexus-accent">
-              V
-            </div>
-            <span className="text-sm font-semibold tracking-[0.22em]">VEXUS</span>
-          </div>
+          <Brand compact />
 
           <nav className="hidden items-center gap-6 text-sm text-vexus-muted md:flex">
             <a href="#platform" className="transition-colors hover:text-vexus-text">Platform</a>
@@ -88,6 +84,7 @@ export default function Landing() {
 
           <div className="rounded-2xl border border-vexus-border bg-gradient-to-br from-vexus-accent/10 to-transparent p-8 shadow-2xl shadow-blue-950/20">
             <div className="flex flex-col gap-6">
+              <img src="/logo.png" alt="VEXUS Security" className="mx-auto h-44 w-44 object-contain" />
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-vexus-muted">Unified visibility</p>
                 <h2 className="mt-2 text-2xl font-semibold text-white">See everything at a glance</h2>

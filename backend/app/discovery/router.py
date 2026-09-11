@@ -1,10 +1,13 @@
+import shutil
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_any_role, require_role
+from app.config.settings import get_settings
 from app.database.session import get_db
-from app.discovery.collectors import DiscoveryCollector, NmapCollector
+from app.discovery.collectors import DiscoveryCollector, NmapCollector, PythonTcpCollector
 from app.discovery.models import ScanJob
 from app.discovery.schemas import ScanRead, ScanRequest
 from app.discovery.service import DiscoveryService
@@ -16,7 +19,22 @@ router = APIRouter(prefix="/api/v1/discovery", tags=["discovery"])
 def get_discovery_collector() -> DiscoveryCollector:
     """Default collector for the running deployment. Overridden in tests
     to inject a SimulatedCollector instead of requiring nmap + network access."""
-    return NmapCollector()
+    settings = get_settings()
+    if settings.DISCOVERY_COLLECTOR == "python":
+        return PythonTcpCollector(
+            ports=settings.discovery_ports_list,
+            timeout_seconds=settings.DISCOVERY_TIMEOUT_SECONDS,
+            max_workers=settings.DISCOVERY_MAX_WORKERS,
+        )
+    if settings.DISCOVERY_COLLECTOR == "nmap":
+        return NmapCollector()
+    if shutil.which("nmap") is not None:
+        return NmapCollector()
+    return PythonTcpCollector(
+        ports=settings.discovery_ports_list,
+        timeout_seconds=settings.DISCOVERY_TIMEOUT_SECONDS,
+        max_workers=settings.DISCOVERY_MAX_WORKERS,
+    )
 
 
 @router.post(

@@ -48,8 +48,8 @@ class NullProvider:
     def generate(self, system_prompt: str, user_prompt: str) -> AIResponse:
         return AIResponse(
             recommendations=[
-                "AI assistant is not configured for this deployment. Set AI_PROVIDER=cloud "
-                "and ANTHROPIC_API_KEY in the environment to enable it."
+                "AI assistant is not configured for this deployment. Set AI_PROVIDER=local "
+                "with Ollama running, or configure a paid cloud provider."
             ],
             confidence=0.0,
         )
@@ -211,3 +211,50 @@ class DeepSeekProvider:
             raise AIProviderError(f"DeepSeek API request failed: {exc}") from exc
 
         return parse_deepseek_response(response.json())
+
+
+def build_ollama_request(system_prompt: str, user_prompt: str, model: str) -> dict:
+    """Build an Ollama chat request with JSON mode enabled."""
+    return {
+        "model": model,
+        "stream": False,
+        "format": "json",
+        "messages": [
+            {"role": "system", "content": f"{system_prompt}\n\n{RESPONSE_SCHEMA_INSTRUCTIONS}"},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+
+
+def parse_ollama_response(raw: dict) -> AIResponse:
+    try:
+        text = raw["message"]["content"]
+    except (KeyError, TypeError) as exc:
+        raise AIProviderError(f"Unexpected Ollama response shape: {exc}") from exc
+    if not text:
+        raise AIProviderError("Ollama response contained no content.")
+    try:
+        return AIResponse(**json.loads(text))
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise AIProviderError(f"Ollama response did not match the required schema: {exc}") from exc
+
+
+class OllamaProvider:
+    """Local Ollama provider. No API key or paid service is required."""
+
+    def __init__(self, base_url: str, model: str, timeout_seconds: float = 120.0):
+        self.url = f"{base_url.rstrip('/')}/api/chat"
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    def generate(self, system_prompt: str, user_prompt: str) -> AIResponse:
+        try:
+            response = httpx.post(
+                self.url,
+                json=build_ollama_request(system_prompt, user_prompt, self.model),
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f"Local Ollama request failed: {exc}") from exc
+        return parse_ollama_response(response.json())

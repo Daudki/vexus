@@ -21,6 +21,7 @@ from app.ai.router import router as ai_router
 from app.audit.router import router as audit_router
 from app.admin.router import router as admin_router
 from app.sense.router import router as sense_router
+from app.correlation.router import router as correlation_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(admin_router)
     app.include_router(sense_router)
+    app.include_router(correlation_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

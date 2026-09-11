@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Footer from "../components/Footer";
+import Brand from "../components/Brand";
 import { useAuth } from "../hooks/useAuth";
 import { ApiError } from "../services/api";
 
@@ -55,10 +56,7 @@ export default function Login() {
             onClick={() => navigate("/")}
             className="flex items-center gap-3 transition-opacity hover:opacity-80"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md border border-vexus-accent/60 bg-vexus-accent/10 text-[10px] font-bold tracking-[0.24em] text-vexus-accent">
-              V
-            </div>
-            <span className="text-sm font-semibold tracking-[0.22em]">VEXUS</span>
+            <Brand compact />
           </button>
 
           <button
@@ -178,7 +176,7 @@ export default function Login() {
 
           <div className="mt-8 border-t border-vexus-border/50 pt-6 text-center text-xs text-vexus-muted">
             <p>On a shared device?{" "}
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setUsername("");

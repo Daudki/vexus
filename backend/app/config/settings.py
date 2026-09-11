@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     
     # Discovery & Scanning
     AUTHORIZED_SCAN_RANGES: Union[List[str], str, None] = None
+    DISCOVERY_COLLECTOR: str = "auto"
+    DISCOVERY_PORTS: Union[List[int], str] = [22, 80, 443, 445, 3389, 8000, 8080]
+    DISCOVERY_TIMEOUT_SECONDS: float = 0.35
+    DISCOVERY_MAX_WORKERS: int = 64
     
     # AI Configuration
     AI_PROVIDER: str = "none"
@@ -52,6 +56,9 @@ class Settings(BaseSettings):
     CLOUD_AI_PROVIDER: str = "anthropic"
     CLOUD_AI_MODEL: str = "claude-3-sonnet-20241022"
     ANTHROPIC_API_KEY: Optional[str] = None
+    LOCAL_AI_URL: str = "http://127.0.0.1:11434"
+    LOCAL_AI_MODEL: str = "llama3.2:3b"
+    LOCAL_AI_TIMEOUT_SECONDS: float = 120.0
     
     # Admin User
     VEXUS_ADMIN_USERNAME: str = "admin"
@@ -96,6 +103,14 @@ class Settings(BaseSettings):
         """Get authorized scan ranges as a list."""
         if isinstance(self.AUTHORIZED_SCAN_RANGES, list):
             return self.AUTHORIZED_SCAN_RANGES
+        return []
+
+    @property
+    def discovery_ports_list(self) -> List[int]:
+        if isinstance(self.DISCOVERY_PORTS, list):
+            return self.DISCOVERY_PORTS
+        if isinstance(self.DISCOVERY_PORTS, str):
+            return [int(port.strip()) for port in self.DISCOVERY_PORTS.split(",") if port.strip()]
         return []
 
 

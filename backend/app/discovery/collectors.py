@@ -1,8 +1,8 @@
 """
 Discovery collectors.
 
-`DiscoveryCollector` is a Protocol so the backend is swappable — Nmap
-today, SNMP or agent-based collection later — without touching
+`DiscoveryCollector` is a Protocol so the backend is swappable — Nmap or
+the dependency-free Python TCP fallback today, SNMP or agent-based collection later — without touching
 DiscoveryService. `NmapCollector` defaults to `-sn` (host discovery /
 ping scan only, no port scan) since that's the minimum needed for the
 inventory use case; port/service discovery is an explicit opt-in via
@@ -13,7 +13,9 @@ wired into the API — see discovery/router.py — because letting
 synthetic hosts flow through the same path as real discovery would
 require Asset-level is_synthetic tagging that doesn't exist yet.
 """
+import concurrent.futures
 import shutil
+import socket
 import subprocess
 import xml.etree.ElementTree as ET
 from typing import Protocol
@@ -107,6 +109,53 @@ class NmapCollector:
             )
 
         return hosts
+
+
+class PythonTcpCollector:
+    """Dependency-free fallback for environments without Nmap.
+
+    A host is reported when it accepts a TCP connection on one of the
+    configured ports. Silent hosts remain undiscovered by design.
+    """
+
+    def __init__(
+        self,
+        ports: list[int] | None = None,
+        timeout_seconds: float = 0.35,
+        max_workers: int = 64,
+    ):
+        self.ports = ports or [22, 80, 443, 445, 3389, 8000, 8080]
+        self.timeout_seconds = timeout_seconds
+        self.max_workers = max_workers
+
+    def discover(self, target_ranges: list[str]) -> list[DiscoveredHost]:
+        from ipaddress import ip_network
+
+        addresses = [
+            str(host)
+            for target in target_ranges
+            for host in ip_network(target, strict=False).hosts()
+        ]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            results = executor.map(self._probe_host, addresses)
+        return [host for host in results if host is not None]
+
+    def _probe_host(self, ip_address: str) -> DiscoveredHost | None:
+        for port in self.ports:
+            try:
+                with socket.create_connection((ip_address, port), timeout=self.timeout_seconds):
+                    return DiscoveredHost(ip_address=ip_address, hostname=self._reverse_hostname(ip_address))
+            except (ConnectionRefusedError, OSError, TimeoutError):
+                continue
+        return None
+
+    @staticmethod
+    def _reverse_hostname(ip_address: str) -> str | None:
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip_address)
+            return hostname
+        except (socket.herror, socket.gaierror, OSError):
+            return None
 
 
 class SimulatedCollector:

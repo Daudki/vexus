@@ -43,7 +43,8 @@ The React/TypeScript application uses route-level pages, shared components, hook
 
 ### V2 gaps
 
-- No correlation service turns related alerts/events into incident candidates.
+- Correlation now exposes read-only incident candidates by grouping active,
+  unsuppressed alerts on the same asset within a configurable time window.
 - No threat-intelligence adapter or vulnerability data model is present.
 - No SIEM/syslog ingestion boundary is present.
 - No identity integration boundary is present.
@@ -71,4 +72,8 @@ The next implementation slice should make asset identity and discovery results r
 - Asset list filters and history return stable, documented results.
 - Backend and frontend verification remain green.
 
-After this milestone, V2 should proceed to Correlate, then threat intelligence and ingestion boundaries, with worker execution added before continuous operation is claimed.
+The asset-intelligence milestone and the first Correlate slice are complete.
+Correlate candidates are projections only; analysts still create incidents
+through the existing Trace workflow. V2 should proceed to threat intelligence
+and ingestion boundaries, with worker execution added before continuous
+operation is claimed.

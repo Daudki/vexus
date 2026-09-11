@@ -75,3 +75,13 @@ Thumbs.db
 *.bak
 *.tmp
 backend/*.db
+
+# --- Generated test and script output ---
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+test-results/
+playwright-report/
+backend/out.txt
+backend/testlog.txt

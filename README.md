@@ -77,10 +77,27 @@ cp ../.env.example .env
 ```
 Edit `.env`: set a real `SECRET_KEY`
 (`python -c "import secrets; print(secrets.token_urlsafe(64))"`).
-Optionally set `AUTHORIZED_SCAN_RANGES` (to run real scans) and
-`AI_PROVIDER=cloud` + `ANTHROPIC_API_KEY` (to enable the AI assistant
-— without these, AI endpoints work but return a "not configured"
-response instead of a real explanation).
+Optionally set `AUTHORIZED_SCAN_RANGES` (to run real scans). For a
+payment-free AI assistant, install Ollama for Windows, start it, and
+download a local model:
+
+```powershell
+ollama pull llama3.2:3b
+```
+
+Then set `AI_PROVIDER=local` in `.env` and restart the backend. VEXUS
+uses Ollama at `http://127.0.0.1:11434` by default. You can change
+`LOCAL_AI_MODEL` to another model already installed in Ollama. Cloud
+options (`AI_PROVIDER=cloud` or `deepseek`) remain available when paid
+API access is configured.
+
+Discovery uses `DISCOVERY_COLLECTOR=auto` by default: it uses Nmap when
+available and falls back to the dependency-free Python TCP collector when
+Nmap is unavailable. Set `DISCOVERY_COLLECTOR=python` to force the fallback,
+or `DISCOVERY_COLLECTOR=nmap` to require Nmap. The Python collector checks
+the ports in `DISCOVERY_PORTS` (default: `22,80,443,445,3389,8000,8080`),
+so it can miss hosts with no listening service on those ports; Nmap remains
+the better choice for broad host discovery and metadata.
 
 ```bash
 python3 -m alembic upgrade head
@@ -169,6 +186,9 @@ vexus/
   abstractions throughout (`DiscoveryCollector`, `MonitoringCollector`,
   `AIProvider`) are exactly what a real worker loop would call, so
   adding one later isn't a rewrite.
+- `PythonTcpCollector` only discovers hosts accepting TCP connections on
+  its configured probe ports; it cannot reliably find silent hosts without
+  ICMP, ARP, or Nmap.
 - `NmapCollector`, `PingCollector`'s Windows path, and
   `AnthropicProvider`'s live HTTP call are real implementations that
   haven't been exercised against real external systems in this dev
@@ -185,8 +205,11 @@ vexus/
 
 ## What's next (V2, per the architecture doc)
 
-VEXUS Sense (behavioral baselines), VEXUS Correlate (multi-alert →
-incident correlation), threat intelligence (CVE/NVD), SIEM/syslog
-ingestion, identity integrations, and a real background worker/scheduler
-are the natural next steps — each one fills a gap explicitly called out
-above, rather than being a new, disconnected direction.
+VEXUS Correlate now exposes read-only incident candidates by grouping
+active, unsuppressed alerts on the same asset within a bounded time
+window. Candidates remain projections until an analyst creates an
+incident, preserving the V1 human-confirmation boundary. The remaining
+next steps are threat intelligence (CVE/NVD), SIEM/syslog ingestion,
+identity integrations, and a real background worker/scheduler — each
+one fills a gap explicitly called out above, rather than being a new,
+disconnected direction.

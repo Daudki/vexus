@@ -40,6 +40,13 @@ const PALETTE: Record<string, string> = {
   security_analyst: "text-blue-400 bg-blue-950/40 border-blue-900",
   network_administrator: "text-purple-400 bg-purple-950/40 border-purple-900",
   viewer: "text-vexus-muted bg-vexus-bg border-vexus-border",
+
+  // system / provider health
+  healthy: "text-green-400 bg-green-950/40 border-green-900",
+  unhealthy: "text-red-400 bg-red-950/40 border-red-900",
+  degraded: "text-yellow-400 bg-yellow-950/40 border-yellow-900",
+  configured: "text-green-400 bg-green-950/40 border-green-900",
+  disabled: "text-vexus-muted bg-vexus-bg border-vexus-border",
 };
 
 const DEFAULT = "text-vexus-muted bg-vexus-bg border-vexus-border";

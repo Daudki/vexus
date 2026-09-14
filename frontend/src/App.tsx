@@ -13,6 +13,7 @@ import Alerts from "./pages/Alerts";
 import Incidents from "./pages/Incidents";
 import IncidentDetail from "./pages/IncidentDetail";
 import AdminPanel from "./pages/AdminPanel";
+import ThreatIntel from "./pages/ThreatIntel";
 
 export default function App() {
   return (
@@ -58,6 +59,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Topology />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/threat-intel"
+            element={
+              <ProtectedRoute>
+                <ThreatIntel />
               </ProtectedRoute>
             }
           />

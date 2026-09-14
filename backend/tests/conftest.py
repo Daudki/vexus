@@ -5,6 +5,19 @@ Each test gets a fresh in-memory SQLite database and a FastAPI
 TestClient wired to it via dependency override — no test touches the
 real dev/prod database.
 """
+import os
+
+# Settings.SECRET_KEY has no default (see app/config/settings.py) so
+# that a real deployment fails loudly instead of silently running with
+# a known, guessable key. That means the test suite must provide its
+# own explicit, throwaway value -- this must happen before any `app.*`
+# import below, since importing app.main/app.database.session
+# transitively constructs Settings(). setdefault() so a developer's
+# real .env (gitignored, not present in a fresh clone or CI) still
+# takes precedence if one happens to exist locally.
+os.environ.setdefault("SECRET_KEY", "test-only-secret-do-not-use-in-production")
+os.environ.setdefault("AI_PROVIDER", "none")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event

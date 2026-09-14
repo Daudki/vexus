@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_any_role
+from app.core.deps import require_any_role, require_role
 from app.database.session import get_db
 from app.monitoring.models import MetricType
 from app.sense.service import SenseService
-from app.users.models import User
+from app.users.models import RoleName, User
 
 router = APIRouter(prefix="/api/v1/sense", tags=["sense"])
 
@@ -40,6 +40,25 @@ def evaluate_asset(
     events = SenseService(db).evaluate_asset(asset_id)
     if not events:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No behavioral anomalies detected.")
+    return [{
+        "id": event.id,
+        "event_type": event.event_type,
+        "asset_id": event.asset_id,
+        "severity": event.severity.value,
+        "confidence": event.confidence,
+    } for event in events]
+
+
+@router.post("/evaluate-all")
+def evaluate_all_assets(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(RoleName.ADMIN, RoleName.SECURITY_ANALYST, RoleName.NETWORK_ADMINISTRATOR)),
+):
+    """Run baseline-anomaly evaluation across every asset with monitoring
+    history. Unlike the per-asset endpoint, an empty result here is the
+    normal case (most assets won't be anomalous most of the time), so
+    this returns 200 with an empty list rather than 404."""
+    events = SenseService(db).evaluate_all_assets()
     return [{
         "id": event.id,
         "event_type": event.event_type,

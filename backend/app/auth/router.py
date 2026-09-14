@@ -1,19 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.auth.schemas import LoginRequest, RefreshRequest, TokenPair
 from app.auth.service import AuthError, AuthService
 from app.config.settings import get_settings
 from app.core.deps import get_current_user
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token
 from app.database.session import get_db
 from app.users.models import User
 from app.users.schemas import UserRead
 
 settings = get_settings()
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 

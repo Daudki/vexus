@@ -983,6 +983,15 @@ Never commit real secrets.
 
 Development Roadmap
 
+Note: this roadmap reflects the original planning snapshot. It has not
+been kept in sync with actual progress — see
+`docs/architecture/V2_ARCHITECTURE_AUDIT.md` for the current, dated,
+verified status (tests run, endpoints checked live) of what's actually
+implemented versus still open. Several items below marked `[ ]` are in
+fact done and tested (e.g. asset CRUD, discovery, monitoring, alerts,
+incidents, risk, AI); reconciling this checklist against the audit doc
+is itself an open task, not something to infer from these boxes alone.
+
 Phase 1 — Foundation
 
 Foundation includes:

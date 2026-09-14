@@ -18,7 +18,14 @@ class Settings(BaseSettings):
     APP_NAME: str = "VEXUS"
     APP_ENV: str = "development"
     DEBUG: bool = True
-    SECRET_KEY: str = "dev-secret-key-change-me"
+    # No default: SECRET_KEY signs every JWT in the system, so a
+    # deployment that forgets to set it must fail loudly at startup
+    # (a pydantic ValidationError) rather than silently running with a
+    # known, working value. This file previously defaulted to
+    # "dev-secret-key-change-me" -- since this is a public repo, that
+    # exact string was public too, which would let anyone forge a
+    # valid admin JWT against any deployment that never overrode it.
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -48,7 +55,36 @@ class Settings(BaseSettings):
     DISCOVERY_PORTS: Union[List[int], str] = [22, 80, 443, 445, 3389, 8000, 8080]
     DISCOVERY_TIMEOUT_SECONDS: float = 0.35
     DISCOVERY_MAX_WORKERS: int = 64
-    
+
+    # Background scheduler (V2: recurring monitoring/detection/discovery/
+    # sense evaluation instead of requiring a manual API call every time).
+    # Off by default: an opt-in flag rather than tied to APP_ENV, so a
+    # test run (which exercises the FastAPI lifespan via `with
+    # TestClient(app)`) never starts real background loops against
+    # whatever DATABASE_URL happens to be configured for the test
+    # process — every existing test's DB access goes through the
+    # `get_db` dependency override instead, which this intentionally
+    # bypasses (see app/core/scheduler.py).
+    SCHEDULER_ENABLED: bool = False
+    SCHEDULER_MONITORING_INTERVAL_SECONDS: int = 300
+    SCHEDULER_DETECTION_INTERVAL_SECONDS: int = 120
+    SCHEDULER_DISCOVERY_INTERVAL_SECONDS: int = 3600
+    SCHEDULER_SENSE_INTERVAL_SECONDS: int = 900
+
+    # Threat Intelligence (NVD CVE feed)
+    NVD_ENABLED: bool = False
+    NVD_API_URL: str = "https://services.nvd.nist.gov/rest/json"
+    NVD_API_KEY: Optional[str] = None
+    NVD_TIMEOUT_SECONDS: float = 15.0
+    # Manual, per-CVE sync only (POST /threat-intel/sync/cve/{id}) makes a
+    # real outbound call to NVD's API and can block a worker thread for up
+    # to NVD_TIMEOUT_SECONDS -- rate limited for the same reason login is:
+    # protects both NVD's service (repeated hammering risks the
+    # deployment's IP getting rate-limited/banned by NVD) and this
+    # server's own thread pool from being exhausted by rapid repeated
+    # syncs.
+    THREAT_INTEL_SYNC_RATE_LIMIT: str = "10/minute"
+
     # AI Configuration
     AI_PROVIDER: str = "none"
     DEEPSEEK_API_KEY: Optional[str] = None

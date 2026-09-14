@@ -18,16 +18,16 @@ import {
   setUserActive,
   updateUserRole,
 } from "../services/users";
-import { getScanRanges, updateScanRanges } from "../services/admin";
+import { getScanRanges, getSystemStats, SystemStats, updateScanRanges } from "../services/admin";
 import { Asset, listAssets, updateAsset } from "../services/assets";
 
 const ROLES: Role[] = ["admin", "security_analyst", "network_administrator", "viewer"];
 
-type Tab = "users" | "devices" | "audit";
+type Tab = "overview" | "users" | "devices" | "audit";
 
 export default function AdminPanel() {
   const { user: me } = useAuth();
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<Tab>("overview");
 
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [scanRanges, setScanRanges] = useState<string[]>([]);
@@ -175,6 +175,9 @@ export default function AdminPanel() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant={tab === "overview" ? "primary" : "secondary"} onClick={() => setTab("overview")}>
+              Overview
+            </Button>
             <Button variant={tab === "users" ? "primary" : "secondary"} onClick={() => setTab("users")}>
               User management
             </Button>
@@ -194,7 +197,9 @@ export default function AdminPanel() {
           <div className="text-sm text-blue-300 bg-blue-950/40 border border-blue-900 rounded px-3 py-2">{notice}</div>
         )}
 
-        {tab === "users" ? (
+        {tab === "overview" ? (
+          <OverviewPanel />
+        ) : tab === "users" ? (
           <>
             <Card className="p-4">
               <h2 className="text-sm font-medium text-vexus-muted mb-3">Authorized scan ranges</h2>
@@ -384,6 +389,59 @@ export default function AdminPanel() {
         )}
       </div>
     </AdminLayout>
+  );
+}
+
+function OverviewPanel() {
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      setStats(await getSystemStats());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load system overview.");
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const cards: { label: string; value: number | string; sub?: string }[] = stats
+    ? [
+        { label: "Users", value: stats.total_users, sub: `${stats.active_users} active` },
+        { label: "Assets", value: stats.total_assets, sub: `${stats.active_assets} online` },
+        { label: "Alerts", value: stats.total_alerts, sub: `${stats.new_alerts} new` },
+        { label: "Incidents", value: stats.total_incidents, sub: `${stats.open_incidents} open` },
+      ]
+    : [];
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="text-sm text-red-400 bg-red-950/40 border border-red-900 rounded px-3 py-2">{error}</div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-vexus-muted">System overview</h2>
+        {stats && <Badge value={stats.health_status} />}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {stats === null && !error && (
+          <Card className="p-4 md:col-span-4 text-center text-xs text-vexus-muted">Loading…</Card>
+        )}
+        {cards.map((card) => (
+          <Card key={card.label} className="p-4">
+            <div className="text-xs uppercase tracking-wider text-vexus-muted">{card.label}</div>
+            <div className="mt-2 text-2xl font-semibold">{card.value}</div>
+            {card.sub && <div className="mt-1 text-xs text-vexus-muted">{card.sub}</div>}
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
 

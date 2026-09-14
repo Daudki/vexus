@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/incidents", label: "Incidents" },
   { to: "/discovery", label: "Discovery" },
   { to: "/topology", label: "Topology" },
+  { to: "/threat-intel", label: "Threat Intel" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

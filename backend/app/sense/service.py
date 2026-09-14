@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.assets.models import Asset
 from app.events.models import EventSeverity, EventSource, NetworkEvent
+from app.health.models import WorkerHeartbeat
 from app.monitoring.models import MetricType, MonitoringSample
 from app.sense.models import BehavioralBaseline
 
@@ -183,3 +184,35 @@ class SenseService:
 
         self.db.commit()
         return events
+
+    def evaluate_all_assets(self) -> list[NetworkEvent]:
+        """Run evaluate_asset() across every asset with monitoring history.
+
+        Thin wrapper only — all anomaly-detection logic stays in
+        evaluate_asset() so there is exactly one implementation of that
+        behavior (see VEXUS v2 Development Rules, "do not introduce a
+        second implementation of the same subsystem"). Used by both the
+        manual trigger endpoint and the background scheduler.
+        """
+        asset_ids = [
+            row[0]
+            for row in self.db.query(MonitoringSample.asset_id).distinct().all()
+        ]
+
+        events: list[NetworkEvent] = []
+        for asset_id in asset_ids:
+            events.extend(self.evaluate_asset(asset_id))
+
+        self._update_heartbeat(status="ok", detail=f"{len(asset_ids)} assets evaluated, {len(events)} anomalies")
+        return events
+
+    def _update_heartbeat(self, *, status: str, detail: str) -> None:
+        hb = self.db.query(WorkerHeartbeat).filter_by(worker_name="sense").first()
+        now = datetime.now(timezone.utc)
+        if hb is None:
+            hb = WorkerHeartbeat(worker_name="sense")
+            self.db.add(hb)
+        hb.last_success_at = now if status == "ok" else hb.last_success_at
+        hb.status = status
+        hb.detail = detail
+        self.db.commit()

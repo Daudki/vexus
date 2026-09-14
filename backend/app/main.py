@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -5,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.auth.router import router as auth_router, limiter as auth_limiter
 from app.config.settings import get_settings
+from app.core.scheduler import start_background_tasks, stop_background_tasks
 from app.database.base import Base
 from app.database.session import engine
 from app.health.router import router as health_router
@@ -22,6 +25,8 @@ from app.audit.router import router as audit_router
 from app.admin.router import router as admin_router
 from app.sense.router import router as sense_router
 from app.correlation.router import router as correlation_router
+from app.events.router import router as events_router
+from app.threat_intel.router import router as threat_intel_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -41,15 +46,26 @@ from app.risk import models as _risk_models  # noqa: F401
 from app.incidents import models as _incidents_models  # noqa: F401
 from app.ai import models as _ai_models  # noqa: F401
 from app.sense import models as _sense_models  # noqa: F401
+from app.threat_intel import models as _threat_intel_models  # noqa: F401
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        tasks = []
+        if settings.SCHEDULER_ENABLED:
+            tasks = start_background_tasks(settings)
+        yield
+        if tasks:
+            await stop_background_tasks(tasks)
+
     app = FastAPI(
         title="VEXUS API",
         description="AI-Powered Network Security Intelligence Platform",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # Rate limiting
@@ -81,6 +97,8 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(sense_router)
     app.include_router(correlation_router)
+    app.include_router(events_router)
+    app.include_router(threat_intel_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

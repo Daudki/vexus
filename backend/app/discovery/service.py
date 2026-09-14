@@ -29,14 +29,15 @@ class DiscoveryService:
         self.assets = AssetService(db)
         self.audit = AuditService(db)
 
-    def run_scan(self, target_ranges: list[str], initiated_by: User, ip_address: str = "") -> ScanJob:
+    def run_scan(self, target_ranges: list[str], initiated_by: User | None = None, ip_address: str = "") -> ScanJob:
         now = datetime.now(timezone.utc)
+        actor_id = initiated_by.id if initiated_by else None
 
         try:
             validate_target_ranges(target_ranges)
         except ScopeError as exc:
             job = ScanJob(
-                initiated_by_user_id=initiated_by.id,
+                initiated_by_user_id=actor_id,
                 target_ranges=json.dumps(target_ranges),
                 status=ScanStatus.REFUSED,
                 started_at=now,
@@ -59,7 +60,7 @@ class DiscoveryService:
             return job
 
         job = ScanJob(
-            initiated_by_user_id=initiated_by.id,
+            initiated_by_user_id=actor_id,
             target_ranges=json.dumps(target_ranges),
             status=ScanStatus.RUNNING,
             started_at=now,

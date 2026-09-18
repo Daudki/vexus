@@ -46,6 +46,7 @@ def _to_detail(db: Session, incident) -> IncidentDetailRead:
         resolution=incident.resolution,
         created_at=incident.created_at,
         updated_at=incident.updated_at,
+        is_synthetic=incident.is_synthetic,
         alert_ids=alert_ids,
         asset_ids=asset_ids,
     )
@@ -54,10 +55,11 @@ def _to_detail(db: Session, incident) -> IncidentDetailRead:
 @router.get("", response_model=list[IncidentRead])
 def list_incidents(
     status_filter: IncidentStatus | None = None,
+    include_synthetic: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(require_any_role),
 ) -> list[IncidentRead]:
-    return IncidentRepository(db).list_all(status=status_filter)
+    return IncidentRepository(db).list_all(status=status_filter, include_synthetic=include_synthetic)
 
 
 @router.post("", response_model=IncidentDetailRead, status_code=status.HTTP_201_CREATED)

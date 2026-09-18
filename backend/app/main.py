@@ -27,6 +27,9 @@ from app.sense.router import router as sense_router
 from app.correlation.router import router as correlation_router
 from app.events.router import router as events_router
 from app.threat_intel.router import router as threat_intel_router
+from app.simulation.router import router as simulation_router
+from app.device_management.router import router as device_management_router
+from app.device_management.agent_router import router as agent_router
 
 # Import all models so Base.metadata is aware of every table before
 # create_all runs. (Alembic migrations take over for anything beyond
@@ -47,6 +50,7 @@ from app.incidents import models as _incidents_models  # noqa: F401
 from app.ai import models as _ai_models  # noqa: F401
 from app.sense import models as _sense_models  # noqa: F401
 from app.threat_intel import models as _threat_intel_models  # noqa: F401
+from app.device_management import models as _device_management_models  # noqa: F401
 
 
 def create_app() -> FastAPI:
@@ -99,6 +103,9 @@ def create_app() -> FastAPI:
     app.include_router(correlation_router)
     app.include_router(events_router)
     app.include_router(threat_intel_router)
+    app.include_router(simulation_router)
+    app.include_router(device_management_router)
+    app.include_router(agent_router)
 
     if settings.APP_ENV == "development":
         # Local convenience only. Production uses Alembic migrations —

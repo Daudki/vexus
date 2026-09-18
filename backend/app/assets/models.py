@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -43,6 +43,11 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     first_seen: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)  # populated by the Risk module (Phase 6)
+    # Simulation Mode (docs/vexus-v2.md, domain 14): a simulated asset
+    # must remain identifiable and must never be mixed silently with
+    # real inventory. Matches the same flag already present on
+    # NetworkEvent/Alert/Incident.
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     @property
     def display_name(self) -> str:

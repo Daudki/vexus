@@ -266,3 +266,131 @@ this audit applies to every module:
 full request chain (auth -> RBAC -> disabled-by-default check -> the
 new endpoints) boots and behaves correctly end-to-end, not just under
 pytest.
+
+## Update: 2026-09-14 — Simulation Mode
+
+Domain 14 is implemented. `app/simulation/` lets an Admin generate a
+small, self-contained demo scenario (2 synthetic assets on the RFC 5737
+TEST-NET-2 documentation range, 2 synthetic events using real
+detection-rule event types) and immediately runs the unmodified
+`DetectionEngine` against it, so alerts appear right away through the
+exact same pipeline real data goes through -- not a separate "fake
+alert" path. `POST /api/v1/simulation/reset` cleanly purges every
+synthetic row in FK-safe order.
+
+Building this surfaced that the domain's core promise -- "simulation
+data must never be mixed silently with production data" -- was not
+actually enforced anywhere before now, even though the hooks existed:
+
+- `Alert` and `Incident` already had `is_synthetic` columns (migrated),
+  but nothing ever set them. `DetectionEngine` hardcoded
+  `is_synthetic=False` on every alert regardless of whether the
+  triggering event was synthetic. Fixed: `Finding` now carries
+  `is_synthetic`, computed from whether every contributing event is
+  synthetic (a mix is treated as real -- never rounded up to
+  synthetic), and `AlertService.upsert_from_finding` uses it instead of
+  a hardcoded value.
+- The alert dedup key was `rule_key:asset_id` -- a synthetic finding
+  for the same rule+asset as a real one would have silently merged
+  into (and extended the evidence trail of) the real alert, or vice
+  versa. The key now includes real/simulated status, so they can never
+  collide.
+- `IncidentService.create_incident` hardcoded `is_synthetic=False`.
+  Fixed to derive it from the linked alerts/assets -- and, since a
+  derived flag when the inputs disagree is itself a way to silently
+  mix data, creating an incident from a mix of real and simulated
+  alerts/assets is now rejected outright (`IncidentError`) rather than
+  guessed at.
+- `Asset` was the one entity in the pipeline with no `is_synthetic`
+  column at all. Added via migration `6efc6543c092`; verified upgrade
+  and downgrade both apply cleanly and zero schema drift against every
+  model, same rigor as every migration this audit has added.
+- No list endpoint (assets, alerts, incidents) filtered on
+  `is_synthetic` at all -- simulated data would have shown up mixed
+  into ordinary views the moment any of it existed. Added
+  `include_synthetic` (default `False`) to all three.
+- Found and fixed the same `len(list(...))`-for-counting inefficiency
+  in the assets repository as was already fixed once in threat-intel
+  (`app/assets/repository.py`) -- flagging repeated patterns like this
+  suggests it's worth grep'ing for `len(list(self.db.scalars(` across
+  the rest of the codebase at some point rather than fixing it
+  module-by-module as each one is touched.
+
+251 backend tests passing (up from 237). Live-verified against a
+running server end-to-end: run -> alerts generated -> excluded from
+normal list views -> visible with include_synthetic=true -> reset ->
+status returns to inactive.
+
+Still open: Authorized Device Management, Device Management Agent
+Architecture (domains 11-12 -- a real device-agent protocol, not yet
+started), and an Identity integration boundary (SSO/LDAP-style external
+identity, distinct from the app's own login system).
+
+## Update: 2026-09-18 — Device Management + Agent Architecture
+
+Domains 11-12 are implemented as a bounded first slice: enrollment,
+policy-gated task queueing, an agent poll/report protocol, and a
+reference agent that proves the whole loop works end-to-end.
+
+`app/device_management/` adds `ManagedDevice` (1:1 with `Asset` --
+most assets are never enrolled; enrollment is a deliberate admin
+action, not automatic) and `DeviceTask`. The spec's own diagram
+("Authorization check -> Action policy engine -> device") is enforced
+literally in `service.py`'s `queue_task()`: role check first, then
+per-action-type confirm requirement, before a task is ever created --
+not just documented.
+
+- Agent authentication is a genuinely separate mechanism from the
+  JWT/User/Role system (`app/device_management/agent_auth.py`) --
+  a distinct trust boundary, not a second implementation of the same
+  subsystem. Agent tokens are high-entropy random values hashed with
+  SHA-256 for indexed lookup (`app/device_management/tokens.py`),
+  deliberately not bcrypt/`hash_password()` -- that's for low-entropy
+  human passwords where slow, salted hashing defends against offline
+  brute force; a 32-byte random token doesn't need that, and bcrypt's
+  per-call salting would make an indexed lookup-by-token impossible.
+- Enrollment is two-step and never trusts the network alone: an admin
+  issues a single-use, 15-minute enrollment token through the human
+  Control API; only that token can mint the durable agent credential,
+  shown to the operator exactly once.
+- `DeviceActionType` is a closed enum (`status_check`,
+  `inventory_sync`, `service_restart`, `reboot`, `isolate`) -- not a
+  generic command string. The spec explicitly warns against exactly
+  that ("agents must not silently execute arbitrary instructions").
+- `reboot`/`isolate` require both an Admin-tier role and an explicit
+  `confirm=true` -- verified live: attempting either without confirm
+  returns 403 before a task is ever created.
+- Completing a state-changing action (`service_restart`/`reboot`/
+  `isolate`) emits a `NetworkEvent` (reusing `EventSource.MANUAL` --
+  a dedicated `DEVICE_MANAGEMENT` source value was considered but
+  skipped: adding a Postgres enum value needs `ALTER TYPE ... ADD
+  VALUE`, which has real transaction-boundary restrictions I couldn't
+  verify against a live Postgres instance in this sandbox; noted as a
+  reasonable follow-up rather than risking an untested migration).
+  Read-only actions (`status_check`/`inventory_sync`) do not.
+- `scripts/reference_agent.py` is a real, working reference
+  implementation of the agent protocol (poll, execute, report) --
+  used to verify the entire flow against an actually-running server,
+  not just pytest: enroll -> agent redeems token -> admin queues
+  status_check -> agent executes and reports -> admin queues reboot
+  without confirm (403) -> queues again with confirm -> agent executes
+  (simulated, the reference agent never performs a real destructive
+  action) -> task shows completed -> exactly one NetworkEvent exists,
+  from the reboot, not the status_check. It deliberately never performs
+  a real reboot/isolate/service-restart -- reports success with a
+  "simulated" result string, so it's safe to run against a real
+  machine as a protocol demonstration.
+- Revoking a device (`POST .../revoke`) clears the agent token hash
+  immediately; verified live that a revoked token stops authenticating
+  on the very next request.
+
+251 -> 271 backend tests passing.
+
+Still open, deliberately not attempted this pass: real OS-level task
+execution (the reference agent simulates destructive actions rather
+than performing them -- a real agent binary per platform is a much
+larger, separate undertaking), a dedicated `DEVICE_MANAGEMENT` event
+source (see above), and a frontend UI for any of this (per the
+"UI will eventually follow" direction from the prior session).
+Identity integration (SSO/LDAP) remains the one fully untouched domain
+from the original 15.

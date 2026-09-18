@@ -76,9 +76,25 @@ class IncidentService:
                 raise IncidentError(f"Alert '{alert_id}' does not exist.")
             alerts.append(alert)
 
+        assets = []
         for asset_id in asset_ids:
-            if self.db.get(Asset, asset_id) is None:
+            asset = self.db.get(Asset, asset_id)
+            if asset is None:
                 raise IncidentError(f"Asset '{asset_id}' does not exist.")
+            assets.append(asset)
+
+        # Simulation data must never be mixed silently with production
+        # data (docs/vexus-v2.md, domain 14). Rather than guessing at a
+        # derived flag when the inputs disagree, refuse outright and
+        # make the analyst split it into two incidents -- one real, one
+        # simulated.
+        synthetic_flags = {a.is_synthetic for a in alerts} | {a.is_synthetic for a in assets}
+        if len(synthetic_flags) > 1:
+            raise IncidentError(
+                "Cannot create an incident from a mix of simulated and real alerts/assets. "
+                "Simulated and production data must stay in separate incidents."
+            )
+        is_synthetic = synthetic_flags.pop() if synthetic_flags else False
 
         if severity is None:
             severity = self._max_severity([a.severity for a in alerts]) if alerts else EventSeverity.MEDIUM
@@ -92,7 +108,7 @@ class IncidentService:
             severity=severity,
             confidence=confidence,
             status=IncidentStatus.OPEN,
-            is_synthetic=False,
+            is_synthetic=is_synthetic,
         )
 
         for alert in alerts:

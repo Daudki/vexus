@@ -32,6 +32,7 @@ class AlertRepository:
         asset_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        include_synthetic: bool = False,
     ) -> list[Alert]:
         query = select(Alert)
         if status:
@@ -40,6 +41,8 @@ class AlertRepository:
             query = query.where(Alert.severity == severity)
         if asset_id:
             query = query.where(Alert.asset_id == asset_id)
+        if not include_synthetic:
+            query = query.where(Alert.is_synthetic.is_(False))
         query = query.order_by(desc(Alert.last_seen)).limit(limit).offset(offset)
         return list(self.db.scalars(query))
 

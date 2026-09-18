@@ -32,6 +32,10 @@ class Finding:
     confidence: float
     description: str
     source_event_ids: list[str] = field(default_factory=list)
+    # Set by DetectionEngine.run() after evaluate() returns, based on
+    # whether every contributing event is synthetic -- individual rules
+    # don't need to know about Simulation Mode themselves.
+    is_synthetic: bool = False
 
 
 class DetectionRule(Protocol):

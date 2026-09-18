@@ -31,9 +31,15 @@ class AlertService:
         self.audit = AuditService(db)
 
     def upsert_from_finding(self, finding: Finding, config: DetectionRuleConfig) -> tuple[Alert, bool]:
-        """Returns (alert, was_created)."""
+        """Returns (alert, was_created).
+
+        The dedup key includes whether the finding is synthetic so a
+        simulated finding can never merge into (or extend the evidence
+        trail of) a real alert for the same rule+asset, or vice versa —
+        they get entirely separate alert records instead.
+        """
         now = datetime.now(timezone.utc)
-        dedup_key = f"{finding.rule_key}:{finding.asset_id}"
+        dedup_key = f"{finding.rule_key}:{finding.asset_id}:{'sim' if finding.is_synthetic else 'real'}"
 
         existing = self.repo.find_active_by_dedup_key(dedup_key)
         window = timedelta(minutes=config.suppression_window_minutes)
@@ -66,7 +72,7 @@ class AlertService:
             first_seen=now,
             last_seen=now,
             suppressed=config.alert_threshold > 1,
-            is_synthetic=False,
+            is_synthetic=finding.is_synthetic,
         )
         return alert, True
 

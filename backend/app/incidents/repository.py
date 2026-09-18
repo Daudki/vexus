@@ -11,10 +11,18 @@ class IncidentRepository:
     def get_by_id(self, incident_id: str) -> Incident | None:
         return self.db.get(Incident, incident_id)
 
-    def list_all(self, status: IncidentStatus | None = None, limit: int = 100, offset: int = 0) -> list[Incident]:
+    def list_all(
+        self,
+        status: IncidentStatus | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        include_synthetic: bool = False,
+    ) -> list[Incident]:
         query = select(Incident)
         if status:
             query = query.where(Incident.status == status)
+        if not include_synthetic:
+            query = query.where(Incident.is_synthetic.is_(False))
         query = query.order_by(desc(Incident.updated_at)).limit(limit).offset(offset)
         return list(self.db.scalars(query))
 

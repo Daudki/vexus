@@ -21,12 +21,18 @@ def list_alerts(
     asset_id: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    include_synthetic: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(require_any_role),
 ) -> list[AlertRead]:
     repo = AlertRepository(db)
     return repo.list_alerts(
-        status=status_filter, severity=severity.value if severity else None, asset_id=asset_id, limit=limit, offset=offset
+        status=status_filter,
+        severity=severity.value if severity else None,
+        asset_id=asset_id,
+        limit=limit,
+        offset=offset,
+        include_synthetic=include_synthetic,
     )
 
 

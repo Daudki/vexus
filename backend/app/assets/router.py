@@ -28,6 +28,7 @@ def list_assets(
         sort_desc=params.sort_desc,
         limit=params.limit,
         offset=params.offset,
+        include_synthetic=params.include_synthetic,
     )
     return assets
 

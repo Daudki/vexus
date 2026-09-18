@@ -28,6 +28,7 @@ class IncidentRead(BaseModel):
     resolution: str
     created_at: datetime
     updated_at: datetime
+    is_synthetic: bool
 
 
 class IncidentDetailRead(IncidentRead):

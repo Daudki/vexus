@@ -23,6 +23,7 @@ class AssetRead(BaseModel):
     last_seen: datetime
     risk_score: float
     display_name: str
+    is_synthetic: bool
 
     @classmethod
     def from_attributes(cls, obj):
@@ -63,3 +64,7 @@ class AssetListParams(BaseModel):
     sort_desc: bool = True
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+    # Simulation Mode: simulated assets must never be mixed silently
+    # into a real inventory view. Off by default -- an explicit opt-in
+    # is required to see them at all.
+    include_synthetic: bool = False

@@ -1,4 +1,4 @@
-from sqlalchemy import asc, desc, or_, select
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.assets.models import Asset, AssetCriticality, AssetHistory, AssetStatus, AssetTrustStatus
@@ -35,6 +35,7 @@ class AssetRepository:
         sort_desc: bool = True,
         limit: int = 50,
         offset: int = 0,
+        include_synthetic: bool = False,
     ) -> tuple[list[Asset], int]:
         query = select(Asset)
 
@@ -57,8 +58,12 @@ class AssetRepository:
             query = query.where(Asset.trust_status == trust_status)
         if criticality:
             query = query.where(Asset.criticality == criticality)
+        if not include_synthetic:
+            # Simulation data must never be mixed silently into a real
+            # inventory view (docs/vexus-v2.md, domain 14).
+            query = query.where(Asset.is_synthetic.is_(False))
 
-        total = len(list(self.db.scalars(query)))
+        total = self.db.scalar(select(func.count()).select_from(query.subquery())) or 0
 
         sort_col = _SORT_COLUMNS.get(sort_by, Asset.last_seen)
         query = query.order_by(desc(sort_col) if sort_desc else asc(sort_col))

@@ -79,6 +79,17 @@ class DetectionEngine:
             findings = [f for f in rule.evaluate(rule_events) if f.confidence >= config.confidence_threshold]
             findings_total += len(findings)
 
+            # A finding is only synthetic if every event that
+            # contributed to it is synthetic -- a mix of real and
+            # simulated evidence must never be silently reported as
+            # either one (VEXUS v2 Development Rules / Simulation Mode:
+            # "simulation data must never be mixed silently with
+            # production data").
+            events_by_id = {e.id: e for e in rule_events}
+            for finding in findings:
+                contributing = [events_by_id[eid] for eid in finding.source_event_ids if eid in events_by_id]
+                finding.is_synthetic = bool(contributing) and all(e.is_synthetic for e in contributing)
+
             for finding in findings:
                 _alert, was_created = self.alerts.upsert_from_finding(finding, config)
                 if was_created:

@@ -55,6 +55,27 @@ class Settings(BaseSettings):
     DISCOVERY_PORTS: Union[List[int], str] = [22, 80, 443, 445, 3389, 8000, 8080]
     DISCOVERY_TIMEOUT_SECONDS: float = 0.35
     DISCOVERY_MAX_WORKERS: int = 64
+    # Which nmap scan profile the platform uses when no per-scan profile
+    # is supplied at the API boundary. The old default (`-sn`, ping
+    # scan only — no port scan at all) is preserved as the explicit
+    # `host_discovery` profile, but the platform default is now
+    # `stealth_syn` (`-sS` TCP SYN half-open scan). A TCP SYN scan
+    # completes the handshake only far enough to read the target's
+    # SYN/ACK or RST response, never sends the final ACK back, and so
+    # leaves no completed connection in the target's application-level
+    # socket table — the conventional industry "stealth scan".
+    #
+    # The profile enum is closed (see app/discovery/collectors.py) —
+    # an operator who needs a different scan technique picks one of
+    # the named profiles at the API boundary
+    # (`POST /discovery/scans { profile: "service_version" }`), rather
+    # than passing free-form nmap flags.
+    DISCOVERY_DEFAULT_PROFILE: str = "stealth_syn"
+    # nmap timing template (0=paranoid .. 5=insane). 3 is nmap's own
+    # default; left as a setting so a deployment on a sensitive link
+    # can dial down to 1 (sneaky) or up to 4 (aggressive) globally
+    # without per-scan profile edits.
+    DISCOVERY_TIMING_TEMPLATE: int = 3
 
     # Background scheduler (V2: recurring monitoring/detection/discovery/
     # sense evaluation instead of requiring a manual API call every time).

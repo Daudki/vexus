@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.assets.models import Asset, AssetChangeType, AssetStatus, AssetHistory
 from app.assets.service import AssetService
 from app.audit.service import AuditService
-from app.discovery.collectors import DiscoveryCollector
+from app.discovery.collectors import DiscoveryCollector, ScanProfile
 from app.discovery.models import ScanJob, ScanStatus
 from app.discovery.scope import ScopeError, validate_target_ranges
 from app.health.models import WorkerHeartbeat
@@ -29,7 +29,13 @@ class DiscoveryService:
         self.assets = AssetService(db)
         self.audit = AuditService(db)
 
-    def run_scan(self, target_ranges: list[str], initiated_by: User | None = None, ip_address: str = "") -> ScanJob:
+    def run_scan(
+        self,
+        target_ranges: list[str],
+        initiated_by: User | None = None,
+        ip_address: str = "",
+        profile: ScanProfile = ScanProfile.STEALTH_SYN,
+    ) -> ScanJob:
         now = datetime.now(timezone.utc)
         actor_id = initiated_by.id if initiated_by else None
 
@@ -39,6 +45,7 @@ class DiscoveryService:
             job = ScanJob(
                 initiated_by_user_id=actor_id,
                 target_ranges=json.dumps(target_ranges),
+                profile=profile,
                 status=ScanStatus.REFUSED,
                 started_at=now,
                 completed_at=now,
@@ -62,6 +69,7 @@ class DiscoveryService:
         job = ScanJob(
             initiated_by_user_id=actor_id,
             target_ranges=json.dumps(target_ranges),
+            profile=profile,
             status=ScanStatus.RUNNING,
             started_at=now,
         )
@@ -74,7 +82,7 @@ class DiscoveryService:
             actor=initiated_by,
             target_type="scan_job",
             target_id=job.id,
-            detail=f"Targets: {', '.join(target_ranges)}",
+            detail=f"Targets: {', '.join(target_ranges)}; Profile: {profile.value}",
             ip_address=ip_address,
         )
 
@@ -99,14 +107,14 @@ class DiscoveryService:
             self.db.commit()
             self.db.refresh(job)
 
-            self._update_heartbeat(status="ok", detail=f"{len(hosts)} hosts discovered")
+            self._update_heartbeat(status="ok", detail=f"{len(hosts)} hosts discovered ({profile.value})")
 
             self.audit.record(
                 action="discovery.scan_completed",
                 actor=initiated_by,
                 target_type="scan_job",
                 target_id=job.id,
-                detail=f"{len(hosts)} hosts, {new_count} new, {changed_count} changed",
+                detail=f"{len(hosts)} hosts, {new_count} new, {changed_count} changed; Profile: {profile.value}",
                 ip_address=ip_address,
             )
 

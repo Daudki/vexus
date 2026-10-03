@@ -394,3 +394,125 @@ source (see above), and a frontend UI for any of this (per the
 "UI will eventually follow" direction from the prior session).
 Identity integration (SSO/LDAP) remains the one fully untouched domain
 from the original 15.
+
+## Update: 2026-10-02 — Stealth-scan hardening + Device Management UI
+
+Two adjacent slices, one per the explicit user request ("that nmap
+is just doing a ping scan, we gotta strengthen it, stealth scan is
+needed") and one per the prior session's own "UI will eventually
+follow" note above. Both verified live against a running server,
+not just under pytest.
+
+### Stealth-scan hardening (`app/discovery/collectors.py` + service/router/schema)
+
+`NmapCollector` is no longer `nmap -sn` (ping scan only — no port
+scan at all). The previous free-form `extra_args` constructor parameter
+is retained for backwards compatibility with existing callers/tests,
+but the primary API is now a closed-enum `ScanProfile`:
+
+- `HOST_DISCOVERY` — the old default (`-sn`), preserved explicitly so
+  callers that wanted cheap host liveness can still get it deliberately.
+- `STEALTH_SYN` — `-sS -T3 -PE -PS21,22,80,443,3389 -PA80,443`. TCP
+  SYN half-open scan: sends SYN, reads SYN/ACK or RST, never sends
+  the final ACK back. No completed connection in the target's
+  application-level socket table. This is the new platform default
+  (the "stealth scan" the spec was asking for).
+- `SERVICE_VERSION` — `STEALTH_SYN` + `-sV` (per-port banner
+  grabbing) + `--version-intensity=5`. Produces the service
+  fingerprints the Asset Intelligence change detector keys off.
+- `OS_DETECT` — `STEALTH_SYN` + `-O` (TCP/IP stack fingerprinting) +
+  `--osscan-limit`. Requires raw-socket privileges on most hosts;
+  nmap will silently skip OS detection if privileges are insufficient
+  and the resulting `DiscoveredHost` simply won't carry an OS field.
+- `FULL` — `STEALTH_SYN` + `-sV` + `-O` (slowest, noisiest).
+
+Every profile also gets `--max-retries=2` and a per-host timeout
+ceiling so a single flaky host can't stall the whole scan. The
+explicit closed enum -- not a free-form command string -- is exactly
+the "make scan scope explicit" rule from the spec, applied to the
+scan *technique*, not just the target range.
+
+Wired through the API boundary:
+- `ScanRequest.profile: ScanProfile | None` (optional; falls back to
+  `Settings.DISCOVERY_DEFAULT_PROFILE`).
+- `ScanJob.profile` (persisted on every scan row, including refused
+  scans, so the audit trail records the scan technique that was
+  requested, not just the targets).
+- `ScanRead.profile` (returned in scan history so the UI can show
+  "this scan was stealth_syn, that one was service_version").
+- New `alembic/versions/a1b2c3d4e5f6_phase_12_discovery_scan_profiles.py`
+  migration adds the column on `scan_jobs`. Verified: applies cleanly
+  on a fresh SQLite DB, zero schema drift against every model
+  (table-by-table, column-by-column, not spot-checked), and the
+  `downgrade -1` then `upgrade head` round-trip applies cleanly.
+- New settings `DISCOVERY_DEFAULT_PROFILE` (default `stealth_syn`)
+  and `DISCOVERY_TIMING_TEMPLATE` (default `3` = nmap's own normal
+  template). A malformed `DISCOVERY_DEFAULT_PROFILE` value is surfaced
+  as a 400 to the caller at scan time, never silently falls back, never
+  crashes the worker.
+
+Frontend: `Discovery.tsx` shows a `<Select>` of the five profiles with
+a per-profile hint, and the scan history table now has a `Profile`
+column showing the technique each scan ran with.
+
+14 new backend tests in `tests/test_nmap_scan_profiles.py`. They do
+NOT invoke nmap (which would require the binary + a real target to
+scan, making every CI env flaky) -- they assert on the assembled
+`nmap_args` list the collector would pass to `subprocess.run`, which
+is the one piece of behavior that actually matters for the "scan
+technique is explicit" rule. The full live-nmap path is exercised
+manually by an operator following the README; the e2e script in
+`scripts/e2e_check.py` runs the rest of the request chain
+(auth -> RBAC -> scope validation -> 422 on bad profile -> 201 on
+good profile -> persisted profile readable back) end-to-end against
+a running server.
+
+### Device Management Frontend UI (`frontend/src/pages/DeviceManagement.tsx` + service)
+
+The "UI will eventually follow" item from the prior session's
+audit-doc tail is closed. A new `DeviceManagement` page wired into
+the main nav under the label "Devices" exposes the entire
+device-management API:
+
+- Lists every `ManagedDevice` (status, agent version, reported OS,
+  last check-in, the underlying asset's display name resolved from
+  `/assets`).
+- Admin-only enrollment form: pick an asset from a dropdown of the
+  current inventory, click "Issue enrollment token", and the
+  single-use enrollment token is shown exactly once in a highlighted
+  amber-bordered card with a copy button. The token is never persisted
+  client-side and the card disappears as soon as the admin clicks
+  "Done".
+- Per-device task panel: click "Tasks" on any device row to open an
+  inline panel showing the device's task history and a queue-task form.
+  The form mirrors the backend `ACTION_POLICY` table
+  client-side (`DEVICE_ACTION_META` in `services/deviceManagement.ts`)
+  so the UI can pre-validate before posting -- selecting `reboot` or
+  `isolate` reveals the "Confirm destructive" checkbox and refuses to
+  submit without it, matching the `403` the backend returns for an
+  unconfirmed destructive action.
+- Admin-only revoke button on every non-revoked device, with a
+  browser-level `confirm()` so a misclick doesn't revoke a production
+  agent credential.
+
+The full flow was verified live end-to-end (script
+`scripts/e2e_check.py`, 15 numbered steps): admin login → discovery
+scan with `profile=service_version` (asserts the persisted profile
+matches the request) → discovery scan without profile (asserts
+`stealth_syn` default applies) → unknown profile rejected with 422 →
+enroll asset → agent redeems enrollment token → admin queues
+`status_check` → admin queues `reboot` without confirm (403) → admin
+queues `reboot` with confirm (200) → agent polls next task → agent
+reports result → admin revokes device → revoked agent token rejected
+on next poll (401) → revoked device still visible in list with
+`status=revoked`.
+
+### Totals
+
+- 271 -> 285 backend tests passing (14 new in `test_nmap_scan_profiles.py`).
+- Frontend: `tsc -b` + `vite build` both pass clean (no new lint/type errors
+  from the new `DeviceManagement.tsx` page or the discovery profile
+  select).
+- Migration drift check passes (table-by-table, column-by-column).
+- End-to-end live verification passes (15/15 numbered steps).
+

@@ -14,6 +14,7 @@ import Incidents from "./pages/Incidents";
 import IncidentDetail from "./pages/IncidentDetail";
 import AdminPanel from "./pages/AdminPanel";
 import ThreatIntel from "./pages/ThreatIntel";
+import DeviceManagement from "./pages/DeviceManagement";
 
 export default function App() {
   return (
@@ -100,6 +101,14 @@ export default function App() {
               <AdminRoute>
                 <AdminPanel />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="/device-management"
+            element={
+              <ProtectedRoute>
+                <DeviceManagement />
+              </ProtectedRoute>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />

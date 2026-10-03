@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { to: "/discovery", label: "Discovery" },
   { to: "/topology", label: "Topology" },
   { to: "/threat-intel", label: "Threat Intel" },
+  { to: "/device-management", label: "Devices" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

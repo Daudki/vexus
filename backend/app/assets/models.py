@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -78,3 +78,19 @@ class AssetHistory(UUIDPrimaryKeyMixin, Base):
     new_value: Mapped[str] = mapped_column(String(512), default="")
     source: Mapped[str] = mapped_column(String(64), default="discovery")  # discovery | manual | monitoring
     changed_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+
+
+class AssetNetworkService(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "asset_services"
+    __table_args__ = (UniqueConstraint("asset_id", "port", "protocol", name="uq_asset_service_port"),)
+
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"), index=True)
+    port: Mapped[int] = mapped_column(Integer)
+    protocol: Mapped[str] = mapped_column(String(8), default="tcp")
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    product: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cpe: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    first_seen: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+

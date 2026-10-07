@@ -24,6 +24,8 @@ def upgrade() -> None:
     # For Postgres the Enum is created as a real type once here.
     scan_profile_enum = sa.Enum(ScanProfile, name="scan_profile")
 
+    scan_profile_enum.create(op.get_bind(), checkfirst=True)
+
     # Use batch_alter_table so this migration applies cleanly on SQLite
     # (which has very limited native ALTER) as well as Postgres.
     with op.batch_alter_table("scan_jobs", schema=None) as batch_op:
@@ -32,7 +34,7 @@ def upgrade() -> None:
                 "profile",
                 scan_profile_enum,
                 nullable=False,
-                server_default=ScanProfile.STEALTH_SYN.value,
+                server_default=ScanProfile.STEALTH_SYN.name,
             )
         )
 

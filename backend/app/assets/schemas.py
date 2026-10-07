@@ -68,3 +68,18 @@ class AssetListParams(BaseModel):
     # into a real inventory view. Off by default -- an explicit opt-in
     # is required to see them at all.
     include_synthetic: bool = False
+
+
+class AssetServiceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    port: int
+    protocol: str
+    name: str | None
+    product: str | None
+    version: str | None
+    cpe: str | None
+    first_seen: datetime
+    last_seen: datetime
+

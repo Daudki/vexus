@@ -201,3 +201,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_assets_ip_address'), table_name='assets')
     op.drop_table('assets')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('assetstatus', 'assetcriticality', 'assettruststatus', 'eventseverity', 'rolename', 'eventsource', 'alertstatus',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

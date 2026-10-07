@@ -516,3 +516,218 @@ on next poll (401) → revoked device still visible in list with
 - Migration drift check passes (table-by-table, column-by-column).
 - End-to-end live verification passes (15/15 numbered steps).
 
+---
+
+## Update: 2026-10-07 — Vulnerability data wired into Risk scoring
+
+Closes the README gap "vulnerability data is not wired into risk scoring."
+The `vulnerabilities` table had no relationship to any asset, so the risk
+engine had nothing to read. This slice adds that relationship and the
+factor that consumes it. Verified live against a running server, not just
+under pytest.
+
+### Asset-to-CVE link (`AssetVulnerability`, `app/threat_intel/models.py`)
+
+- One row per (asset, CVE) pair; a unique constraint rejects duplicates.
+- `confidence` is mandatory (`confirmed` | `inferred`), following the
+  Nexus rule. Manual links are `confirmed` because an analyst asserted
+  them and the assertion is audited. `inferred` exists for a future
+  automatic matcher (CPE matching) and nothing writes it yet.
+- `match_source` records where a link came from (`manual` today).
+- `is_synthetic` is derived from the asset, never hardcoded.
+- Migration `b4c5d6e7f8a9`. Verified: single head, applies cleanly on a
+  fresh SQLite database, zero drift across all 25 tables, and the
+  `downgrade -1` then `upgrade head` round trip applies cleanly. Not
+  executed against live Postgres; the enum is named
+  `vulnerability_match_confidence` and dropped explicitly on downgrade.
+
+### Endpoints (`/api/v1/threat-intel/assets/{asset_id}/vulnerabilities`)
+
+- `GET` — any authenticated role.
+- `POST {cve_id}` — Admin or Security Analyst. 404 if the asset or the
+  CVE is unknown (the CVE must already be synced), 409 if the CVE is
+  already linked or has been rejected by NVD, 422 on a malformed CVE id.
+- `DELETE /{cve_id}` — Admin or Security Analyst.
+- Link and unlink each write an audit entry.
+
+### Risk factor (`app/risk/service.py`)
+
+Each linked, non-rejected CVE adds a named `vulnerability` factor:
+CVSS severity weight (critical 15, high 10, medium 5, low 2) multiplied
+by a confidence multiplier (confirmed 1.0, inferred 0.5). The total
+vulnerability contribution is capped at 30, with the reduction shown as
+an explicit negative `vulnerability_cap` factor, matching how the alert
+cap already works. A CVE with no CVSS severity is listed with 0 points
+rather than hidden. Scores are not recomputed automatically when a link
+changes; they update on the next recompute, same as alert changes.
+
+### Verification
+
+- Live run: asset scored 8.0 with no links; 33.0 after linking a
+  critical and a high CVE (8 + 15 + 10); duplicate link returned 409;
+  unlink returned 204 and the score fell to 18.0.
+- 285 -> 304 backend tests passing (19 new: 3 model, 10 router/RBAC/audit,
+  6 risk-factor).
+
+### Still open
+
+- Superseded by the 2026-10-07 entry below: automatic matching and the
+  frontend screen both exist now.
+- `alembic check` (stricter than the column-name drift check in the
+  knowledge-transfer doc) reports three pre-existing type-level
+  differences unrelated to this slice: a missing `ix_audit_logs_target`
+  index, `roles.description` (VARCHAR(255) in the migration, Text in the
+  model) and `users.username` (VARCHAR(64) in the migration, String(50)
+  in the model). `asset_vulnerabilities` is clean. Not fixed here.
+
+---
+
+## Update: 2026-10-07 — Service inventory, automatic CVE matching, Exposure screen
+
+Three things in one slice, in dependency order. Verified live against a
+running server and with 323 backend tests; the frontend is verified by
+`tsc -b` and `vite build` only, not exercised in a browser.
+
+### Finding: nmap service detection was not feeding anything
+
+Before this change, service detection was effectively not working end to
+end, and an earlier audit line overstated it:
+
+- The default profile (`stealth_syn`) never passes `-sV`, so no product
+  or version is requested unless an operator picks `service_version` or
+  `full`.
+- `NmapCollector._parse_xml` read only open port numbers. It discarded
+  each port's `<service>` name, product, version and `<cpe>`.
+- `DiscoveredHost.open_ports` was passed through but never persisted to
+  any table.
+- The earlier claim that scans "produce the service fingerprints the
+  Asset Intelligence change detector keys off" was not true: no code
+  stored or compared service data.
+
+nmap is not installed in the build sandbox, so the parser is verified
+against representative nmap XML, not a live scan.
+
+### Service inventory (`AssetNetworkService`, table `asset_services`)
+
+- The parser now returns a `DiscoveredService` per open port (port,
+  protocol, name, product, version, first application CPE).
+- `AssetService.upsert_from_discovery` persists them. A scan that ran a
+  port scan replaces the asset's service set (closed ports are dropped);
+  a ping-only scan (no `<ports>` element) leaves services untouched. A
+  later scan without version data does not erase a version already known.
+- `GET /api/v1/assets/{id}/services` (any role).
+- Migration `c5d6e7f8a9b0`. Verified: single head, clean on a fresh
+  SQLite database, zero drift over 26 tables, and `alembic check` reports
+  nothing for the new table.
+
+### Automatic matching (`app/threat_intel/matching.py`)
+
+- Matches an asset's service CPE against the CVE's NVD configuration
+  data in `raw_data`, not the flat `affected_cpes` list. That list drops
+  version ranges and the `vulnerable` flag, so matching on it alone would
+  link every version of a product and platform-only entries.
+- Honours `versionStart/EndIncluding/Excluding`, exact versions, and
+  all-version wildcards; ignores `vulnerable: false` entries and
+  rejected or truncated CVE records. A service with no known version
+  never matches.
+- Every automatic link is `inferred` with `match_source = "cpe_match"`,
+  so it scores at half weight. The matcher does not model NVD's AND
+  logic (product running on a platform), which is why it is never
+  `confirmed`.
+- Re-matching an asset adds missing links and removes automatic links
+  that no longer match (for example after a patch). Manual links are
+  never changed or removed, and a pair that already has a manual link is
+  not duplicated.
+- Triggers: after a discovery scan for each scanned asset (a matching
+  failure is logged and does not fail the scan), after a CVE sync for
+  every asset running that product, and on demand via
+  `POST /api/v1/threat-intel/match` (Admin or Security Analyst).
+- Version comparison is a tolerant tokenizer, not a full per-vendor
+  scheme. Unusual version strings can compare wrongly in either
+  direction; that is the reason for `inferred`.
+
+### Frontend (`components/AssetExposure.tsx`, shown on the asset page)
+
+Detected services table, linked CVEs with severity, confidence and
+source (analyst or auto-match), link and unlink for Admin and Security
+Analyst, and a "Run CVE matching" button. Linking or unlinking
+recomputes the asset's risk score immediately. The empty state tells the
+operator to run a Discovery scan with the Service version profile.
+
+### Totals
+
+- 304 -> 323 backend tests passing (19 new in
+  `tests/test_vulnerability_matching.py`).
+- Live run: an asset with OpenSSH 8.2p1 and a CVE affecting versions
+  before 9.8 was linked automatically as `inferred`, scored 5.0 points
+  (10 x 0.5), and a second match run changed nothing.
+
+### Still open
+
+- The platform default scan profile is still `stealth_syn`, which
+  collects no versions, so automatic matching only has data after a
+  `service_version` or `full` scan. Changing the default is a noisier
+  scan and was left as an explicit decision.
+- OS-level CVEs are not matched (`osmatch` CPEs are not captured).
+- Services without an nmap CPE are shown but cannot be matched.
+- No scheduled matching job; matching runs on scan, on CVE sync and on
+  demand.
+- The Exposure screen has not been exercised in a browser.
+
+---
+
+## Update: 2026-10-07 — Migrations verified on real Postgres, schema drift closed
+
+The three differences recorded in the previous entry are fixed. More
+importantly, a real Postgres 16 became available in the sandbox (the
+earlier install failure was a stale apt index), so the whole migration
+chain was run against it for the first time. That found defects SQLite
+cannot show.
+
+### Defects found and fixed
+
+- `a1b2c3d4e5f6` (scan profiles) failed outright on Postgres: it added a
+  `scan_profile` column without creating the enum type first. Fixed in
+  place by creating the type before the column. This could not have been
+  applied on any Postgres database, so editing it in place is safe.
+- The same migration backfilled existing rows with the enum value
+  `stealth_syn`, but the model stores enum names (`STEALTH_SYN`). On any
+  SQLite database that already had scan jobs, those rows raised
+  `LookupError` when loaded, which would break scan history. Reproduced
+  and fixed: the migration default is now the name, and `d6e7f8a9b0c1`
+  repairs existing rows on non-Postgres databases.
+- Nine older migrations created 16 enum types and never dropped them on
+  downgrade, so `downgrade base` followed by `upgrade head` failed on
+  Postgres. Each downgrade now drops the types its migration created.
+  Upgrade behaviour is unchanged.
+
+### Schema drift closed (`d6e7f8a9b0c1`)
+
+- Added the missing `ix_audit_logs_target` index.
+- `roles.description` is now Text and nullable, matching the model.
+- `users.username` model length set to 64 to match the database and the
+  other username columns; the API still limits new usernames to 50, and
+  narrowing the column was avoided because it could fail on existing data.
+- `users.created_at`, `updated_at` and `last_login` are declared
+  timezone-aware, matching the migrations and how `last_login` was
+  already written. Defaults are now timezone-aware UTC.
+- Dropped the redundant `vulnerabilities_cve_id_key` unique constraint on
+  Postgres; the unique index `ix_vulnerabilities_cve_id` remains.
+
+### Verification
+
+- Fresh SQLite and fresh Postgres: upgrade head, `alembic check` reports
+  no differences, `downgrade base`, `upgrade head`, `alembic check` again
+  clean. Both pass.
+- The application was run against the migrated Postgres: discovery
+  service storage, automatic CVE matching, link listing, risk
+  recompute and the scan history endpoint all behaved correctly,
+  including the new `vulnerability_match_confidence` enum.
+- 323 backend tests still pass (they use SQLite).
+
+### Still open
+
+- The test suite runs on SQLite only; nothing in CI exercises Postgres.
+- The Postgres check of `EventSource.DEVICE_MANAGEMENT` (an `ALTER TYPE
+  ... ADD VALUE`) is now possible and has not been done.
+

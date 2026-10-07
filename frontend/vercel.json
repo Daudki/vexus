@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://vexus-api-xxxx.onrender.com/api/:path*"
+    }
+  ]
+}

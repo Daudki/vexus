@@ -7,6 +7,7 @@ Health) -> audit log. All of the actual "what changed" logic lives in
 AssetService; all of the "is this allowed" logic lives in scope.py.
 """
 import json
+import logging
 from datetime import datetime, timezone
 from ipaddress import ip_address, ip_network
 
@@ -19,7 +20,10 @@ from app.discovery.collectors import DiscoveryCollector, ScanProfile
 from app.discovery.models import ScanJob, ScanStatus
 from app.discovery.scope import ScopeError, validate_target_ranges
 from app.health.models import WorkerHeartbeat
+from app.threat_intel.service import AssetVulnerabilityService
 from app.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class DiscoveryService:
@@ -92,12 +96,16 @@ class DiscoveryService:
 
             new_count = 0
             changed_count = 0
+            scanned_assets = []
             for host in hosts:
                 result = self.assets.upsert_from_discovery(host, source="discovery")
+                if host.services is not None:
+                    scanned_assets.append(result.asset)
                 if result.is_new:
                     new_count += 1
                 elif result.changes:
                     changed_count += 1
+            self._match_vulnerabilities(scanned_assets)
 
             job.status = ScanStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
@@ -194,6 +202,15 @@ class DiscoveryService:
             source=source,
             changed_at=now,
         )
+
+    def _match_vulnerabilities(self, assets) -> None:
+        matcher = AssetVulnerabilityService(self.db)
+        for asset in assets:
+            try:
+                matcher.match_asset(asset)
+            except Exception:  # noqa: BLE001
+                self.db.rollback()
+                logger.exception("Vulnerability matching failed for asset %s", asset.id)
 
     def _update_heartbeat(self, *, status: str, detail: str) -> None:
         hb = self.db.query(WorkerHeartbeat).filter_by(worker_name="discovery").first()

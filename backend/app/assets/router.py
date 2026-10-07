@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.assets.repository import AssetRepository
-from app.assets.schemas import AssetHistoryRead, AssetListParams, AssetRead, AssetUpdate
+from app.assets.models import AssetNetworkService
+from app.assets.schemas import AssetHistoryRead, AssetListParams, AssetRead, AssetServiceRead, AssetUpdate
 from app.assets.service import AssetService
 from app.audit.service import AuditService
 from app.core.deps import require_any_role, require_role
@@ -41,6 +42,21 @@ def get_asset(
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
     return asset
+
+
+@router.get("/{asset_id}/services", response_model=list[AssetServiceRead])
+def list_asset_services(
+    asset_id: str, db: Session = Depends(get_db), _: User = Depends(require_any_role)
+) -> list[AssetServiceRead]:
+    if AssetRepository(db).get_by_id(asset_id) is None:
+        raise HTTPException(status_code=404, detail="Asset not found.")
+    rows = (
+        db.query(AssetNetworkService)
+        .filter(AssetNetworkService.asset_id == asset_id)
+        .order_by(AssetNetworkService.port)
+        .all()
+    )
+    return [AssetServiceRead.model_validate(row) for row in rows]
 
 
 @router.get("/{asset_id}/history", response_model=list[AssetHistoryRead])

@@ -55,3 +55,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_asset_history_asset_id'), table_name='asset_history')
     op.drop_table('asset_history')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('assetchangetype', 'scanstatus',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

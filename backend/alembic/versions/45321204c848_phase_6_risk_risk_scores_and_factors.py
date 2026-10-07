@@ -52,3 +52,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_risk_scores_asset_id'), table_name='risk_scores')
     op.drop_table('risk_scores')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('risklevel',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

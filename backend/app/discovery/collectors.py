@@ -41,7 +41,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import Protocol
 
-from app.assets.service import DiscoveredHost
+from app.assets.service import DiscoveredHost, DiscoveredService
 
 
 class ScanProfile(str, enum.Enum):
@@ -286,14 +286,17 @@ class NmapCollector:
                     operating_system = match_el.get("name")
 
             open_ports: list[int] = []
+            services: list[DiscoveredService] | None = None
             ports_el = host_el.find("ports")
             if ports_el is not None:
+                services = []
                 for port_el in ports_el.findall("port"):
                     state_el = port_el.find("state")
                     if state_el is not None and state_el.get("state") == "open":
                         port_id = port_el.get("portid")
                         if port_id is not None:
                             open_ports.append(int(port_id))
+                            services.append(NmapCollector._parse_service(port_el, int(port_id)))
 
             hosts.append(
                 DiscoveredHost(
@@ -303,10 +306,31 @@ class NmapCollector:
                     operating_system=operating_system,
                     vendor=vendor,
                     open_ports=open_ports,
+                    services=services,
                 )
             )
 
         return hosts
+
+    @staticmethod
+    def _parse_service(port_el, port_id: int) -> DiscoveredService:
+        service_el = port_el.find("service")
+        cpe = None
+        name = product = version = None
+        if service_el is not None:
+            name = service_el.get("name")
+            product = service_el.get("product")
+            version = service_el.get("version")
+            cpes = [el.text.strip() for el in service_el.findall("cpe") if el.text and el.text.strip()]
+            cpe = next((c for c in cpes if c.startswith("cpe:/a:") or c.startswith("cpe:2.3:a:")), None)
+        return DiscoveredService(
+            port=port_id,
+            protocol=port_el.get("protocol") or "tcp",
+            name=name,
+            product=product,
+            version=version,
+            cpe=cpe,
+        )
 
 
 class PythonTcpCollector:

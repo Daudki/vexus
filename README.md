@@ -44,7 +44,8 @@ per-rule configuration live in the database (`DetectionRuleConfig`) —
 thresholds can be tuned without a redeploy.
 
 **Phase 6 — Risk:** explainable scoring. Every score is a sum of named,
-visible factors (criticality, trust status, active alerts), stored
+visible factors (criticality, trust status, active alerts, linked
+vulnerabilities), stored
 individually so any score can be traced back to its inputs.
 
 **Phase 7 — Trace:** incident investigation. Analyst-created incidents
@@ -258,7 +259,7 @@ cd backend
 python3 -m pytest tests/ -q
 ```
 
-285 backend tests passing. Coverage spans every module: auth, RBAC,
+323 backend tests passing. Coverage spans every module: auth, RBAC,
 discovery (including scan profiles), monitoring (cross-platform ping
 parsing), topology, detection/alerting, risk scoring, incident
 investigation, device management (including the agent auth boundary),
@@ -355,15 +356,21 @@ Known limitations (honest, not hidden)
   fully untouched domain from the original 15. The app has its own
   login system; there's no boundary for an external identity provider
   yet.
-· Vulnerability data is not wired into risk scoring yet. The
-  vulnerabilities table exists (populated by the threat-intel sync);
-  the risk engine doesn't consume it.
+· Automatic CVE matching only has data after a scan that collects
+  service versions (`service_version` or `full`). The default
+  `stealth_syn` profile collects none. Matching covers application
+  services with an nmap CPE, not operating systems, and every automatic
+  link is `inferred`.
+· The Exposure screen on the asset page (services, linked CVEs, link and
+  unlink) is verified by TypeScript and build checks, not exercised in a
+  browser.
 · Nexus has no traffic-based relationships anywhere in the platform.
 · Detect implements 5 of 8 originally-designed rules (no port-exposure,
   connection-failure, or traffic-volume detection — no data source
   exists for any of them yet).
-· Risk implements 3 of 5 originally-envisioned factor categories (no
-  vulnerability data, no behavioral-anomaly baselines wired in).
+· Risk implements 4 of 5 originally-envisioned factor categories
+  (criticality, trust, alerts, linked vulnerabilities); behavioral-
+  anomaly baselines are not wired in.
 · SQLite path selection is process-directory dependent for local
   development. Normalizing development startup around one path is an
   open item.
@@ -382,7 +389,6 @@ The remaining named gaps, per the audit doc's dated entries:
 · Identity integration — SSO/LDAP-style external identity.
 · Real OS-level agent task execution — a per-platform agent binary.
 · A dedicated DEVICE_MANAGEMENT event source.
-· Wiring vulnerability data into risk scoring.
 
 Development is governed by the rules in docs/vexus-v2.md — most
 importantly: no duplicating subsystems, no hardcoded mock data as

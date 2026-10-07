@@ -21,6 +21,7 @@ from app.events.models import EventSeverity
 from app.health.models import WorkerHeartbeat
 from app.risk.models import RiskLevel, RiskScore
 from app.risk.repository import RiskRepository
+from app.threat_intel.models import AssetVulnerability, Vulnerability, VulnerabilityMatchConfidence
 from app.users.models import User
 
 # --- Weights (visible, documented, tunable by editing these constants) ---
@@ -46,6 +47,19 @@ ALERT_SEVERITY_WEIGHTS: dict[EventSeverity, float] = {
     EventSeverity.CRITICAL: 20,
 }
 ALERT_CONTRIBUTION_CAP = 40  # one asset can't hit CRITICAL purely from alert volume
+
+VULNERABILITY_SEVERITY_WEIGHTS: dict[str, float] = {
+    "NONE": 0,
+    "LOW": 2,
+    "MEDIUM": 5,
+    "HIGH": 10,
+    "CRITICAL": 15,
+}
+VULNERABILITY_CONFIDENCE_MULTIPLIERS: dict[VulnerabilityMatchConfidence, float] = {
+    VulnerabilityMatchConfidence.CONFIRMED: 1.0,
+    VulnerabilityMatchConfidence.INFERRED: 0.5,
+}
+VULNERABILITY_CONTRIBUTION_CAP = 30
 
 _ACTIVE_ALERT_STATUSES = (
     AlertStatus.NEW,
@@ -140,7 +154,47 @@ class RiskEngine:
                 }
             )
 
-        total = max(0.0, min(100.0, crit_points + trust_points + alert_points))
+        linked = (
+            self.db.query(AssetVulnerability, Vulnerability)
+            .join(Vulnerability, Vulnerability.id == AssetVulnerability.vulnerability_id)
+            .filter(AssetVulnerability.asset_id == asset.id, Vulnerability.is_rejected.is_(False))
+            .order_by(Vulnerability.cve_id)
+            .all()
+        )
+        vuln_points_raw = 0.0
+        for link, vuln in linked:
+            severity = (vuln.cvss_severity or "").upper()
+            base = VULNERABILITY_SEVERITY_WEIGHTS.get(severity, 0)
+            points = base * VULNERABILITY_CONFIDENCE_MULTIPLIERS[link.confidence]
+            vuln_points_raw += points
+            if severity in VULNERABILITY_SEVERITY_WEIGHTS:
+                detail = f"CVSS {vuln.cvss_score}, {link.confidence.value} link ({link.match_source})."
+            else:
+                detail = f"No CVSS severity available, so no points are applied. {link.confidence.value} link ({link.match_source})."
+            factors.append(
+                {
+                    "factor_key": "vulnerability",
+                    "label": f"Linked vulnerability: {vuln.cve_id} ({severity.lower() or 'unscored'})",
+                    "points": points,
+                    "description": detail,
+                }
+            )
+        vuln_points = min(vuln_points_raw, VULNERABILITY_CONTRIBUTION_CAP)
+        if vuln_points_raw > VULNERABILITY_CONTRIBUTION_CAP:
+            factors.append(
+                {
+                    "factor_key": "vulnerability_cap",
+                    "label": "Vulnerability contribution capped",
+                    "points": vuln_points - vuln_points_raw,
+                    "description": (
+                        f"Raw vulnerability contribution ({vuln_points_raw:.1f}) exceeds the "
+                        f"{VULNERABILITY_CONTRIBUTION_CAP}-point cap; capped so vulnerability count alone "
+                        "can't drive an asset to CRITICAL."
+                    ),
+                }
+            )
+
+        total = max(0.0, min(100.0, crit_points + trust_points + alert_points + vuln_points))
         level = _level_for_score(total)
 
         risk_score = self.repo.create_score(

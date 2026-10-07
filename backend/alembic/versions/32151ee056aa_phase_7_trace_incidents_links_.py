@@ -83,3 +83,7 @@ def downgrade() -> None:
     op.drop_table('incident_alerts')
     op.drop_table('incidents')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('incidentstatus',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import AssetExposure from "../components/AssetExposure";
 import Layout from "../components/Layout";
 import Sparkline from "../components/Sparkline";
 import Badge from "../components/ui/Badge";
@@ -260,6 +261,10 @@ export default function AssetDetail() {
             </div>
           )}
         </Card>
+
+        {assetId && (
+          <AssetExposure assetId={assetId} onLinksChanged={canRecomputeRisk ? handleRecomputeRisk : undefined} />
+        )}
 
         <Card className="p-4">
           <h2 className="text-sm font-medium text-vexus-muted mb-3">Recent latency</h2>

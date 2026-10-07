@@ -88,3 +88,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_managed_devices_enrollment_token_hash"), table_name="managed_devices")
     op.drop_index(op.f("ix_managed_devices_asset_id"), table_name="managed_devices")
     op.drop_table("managed_devices")
+
+    bind = op.get_bind()
+    for enum_name in ('manageddevicestatus', 'deviceactiontype', 'devicetaskstatus',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

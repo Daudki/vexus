@@ -15,9 +15,26 @@ from ipaddress import ip_address
 
 from sqlalchemy.orm import Session
 
-from app.assets.models import Asset, AssetChangeType, AssetCriticality, AssetStatus, AssetTrustStatus
+from app.assets.models import (
+    Asset,
+    AssetChangeType,
+    AssetCriticality,
+    AssetNetworkService,
+    AssetStatus,
+    AssetTrustStatus,
+)
 from app.assets.repository import AssetRepository
 from app.events.models import EventSeverity, EventSource, NetworkEvent
+
+
+@dataclass
+class DiscoveredService:
+    port: int
+    protocol: str = "tcp"
+    name: str | None = None
+    product: str | None = None
+    version: str | None = None
+    cpe: str | None = None
 
 
 @dataclass
@@ -31,6 +48,7 @@ class DiscoveredHost:
     operating_system: str | None = None
     vendor: str | None = None
     open_ports: list[int] | None = None
+    services: list["DiscoveredService"] | None = None
 
 
 @dataclass
@@ -49,6 +67,48 @@ class AssetService:
 
     def upsert_from_discovery(self, host: DiscoveredHost, *, source: str = "discovery") -> UpsertResult:
         host = self._normalize_host(host)
+        result = self._upsert_host(host, source=source)
+        if host.services is not None:
+            self._store_services(result.asset, host.services)
+        return result
+
+    def _store_services(self, asset: Asset, services: list[DiscoveredService]) -> None:
+        now = datetime.now(timezone.utc)
+        existing = {
+            (row.port, row.protocol): row
+            for row in self.db.query(AssetNetworkService).filter(AssetNetworkService.asset_id == asset.id)
+        }
+        seen: set[tuple[int, str]] = set()
+        for svc in services:
+            key = (svc.port, svc.protocol)
+            seen.add(key)
+            row = existing.get(key)
+            if row is None:
+                self.db.add(
+                    AssetNetworkService(
+                        asset_id=asset.id,
+                        port=svc.port,
+                        protocol=svc.protocol,
+                        name=svc.name,
+                        product=svc.product,
+                        version=svc.version,
+                        cpe=svc.cpe,
+                        first_seen=now,
+                        last_seen=now,
+                    )
+                )
+                continue
+            row.name = svc.name or row.name
+            row.product = svc.product or row.product
+            row.version = svc.version or row.version
+            row.cpe = svc.cpe or row.cpe
+            row.last_seen = now
+        for key, row in existing.items():
+            if key not in seen:
+                self.db.delete(row)
+        self.db.commit()
+
+    def _upsert_host(self, host: DiscoveredHost, *, source: str) -> UpsertResult:
         now = datetime.now(timezone.utc)
 
         # Prefer MAC as the stable identity key (IP can rotate via DHCP);
@@ -182,6 +242,7 @@ class AssetService:
             operating_system=host.operating_system.strip() if host.operating_system else None,
             vendor=host.vendor.strip() if host.vendor else None,
             open_ports=host.open_ports,
+            services=host.services,
         )
 
     # --- Analyst-facing operations ---

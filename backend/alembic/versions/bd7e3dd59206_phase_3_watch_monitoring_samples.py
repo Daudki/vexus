@@ -41,3 +41,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_monitoring_samples_asset_id'), table_name='monitoring_samples')
     op.drop_table('monitoring_samples')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('metrictype',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

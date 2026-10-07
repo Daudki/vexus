@@ -3,7 +3,7 @@ import json
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.threat_intel.models import Vulnerability
+from app.threat_intel.models import AssetVulnerability, Vulnerability
 
 # raw_data is an unbounded Text column (no hard DB limit like the
 # String(4096) columns used elsewhere), but "unbounded" shouldn't mean
@@ -70,3 +70,34 @@ class VulnerabilityRepository:
         existing.is_rejected = record.is_rejected
         self.db.flush()
         return existing, created, updated
+
+
+class AssetVulnerabilityRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get(self, asset_id: str, vulnerability_id: str) -> AssetVulnerability | None:
+        return self.db.scalar(
+            select(AssetVulnerability).where(
+                AssetVulnerability.asset_id == asset_id,
+                AssetVulnerability.vulnerability_id == vulnerability_id,
+            )
+        )
+
+    def list_for_asset(self, asset_id: str) -> list[tuple[AssetVulnerability, Vulnerability]]:
+        query = (
+            select(AssetVulnerability, Vulnerability)
+            .join(Vulnerability, Vulnerability.id == AssetVulnerability.vulnerability_id)
+            .where(AssetVulnerability.asset_id == asset_id)
+            .order_by(desc(Vulnerability.cvss_score), Vulnerability.cve_id)
+        )
+        return [(link, vuln) for link, vuln in self.db.execute(query).all()]
+
+    def create(self, link: AssetVulnerability) -> AssetVulnerability:
+        self.db.add(link)
+        self.db.flush()
+        return link
+
+    def delete(self, link: AssetVulnerability) -> None:
+        self.db.delete(link)
+        self.db.flush()

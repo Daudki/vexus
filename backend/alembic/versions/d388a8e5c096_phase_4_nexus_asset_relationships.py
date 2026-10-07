@@ -49,3 +49,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_asset_relationships_relationship_type'), table_name='asset_relationships')
     op.drop_table('asset_relationships')
     # ### end Alembic commands ###
+
+    bind = op.get_bind()
+    for enum_name in ('relationshipconfidence',):
+        sa.Enum(name=enum_name).drop(bind, checkfirst=True)

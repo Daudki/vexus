@@ -23,7 +23,7 @@ Two documents already live in the repo and stay authoritative for scope/status �
 |---|---|
 | `auth` | Login, JWT issuance/refresh, rate-limited login |
 | `users` | User/Role CRUD, RBAC role definitions |
-| `assets` | Asset inventory (the "what devices exist" table) |
+| `assets` | Asset inventory (the "what devices exist" table) and per-asset detected services (`AssetNetworkService`) |
 | `discovery` | Active network scanning (nmap or Python-TCP fallback), scope enforcement |
 | `monitoring` | Passive polling (ping/latency) of known assets |
 | `events` | `NetworkEvent` — the central data contract; also the external ingestion boundary (`POST /events/ingest` for syslog/threat-intel/manual sources) |
@@ -31,10 +31,10 @@ Two documents already live in the repo and stay authoritative for scope/status �
 | `alerts` | Alert CRUD, status workflow, assignment |
 | `correlation` | **Read-only** candidate grouping of alerts by asset+time — does NOT create incidents itself |
 | `incidents` | Analyst-driven incident creation from alerts/assets, investigation notes, timeline |
-| `risk` | Risk scoring for assets |
+| `risk` | Risk scoring for assets: criticality, trust, active alerts, and linked vulnerabilities (`AssetVulnerability`, owned by `threat_intel`) |
 | `topology` | Asset relationship graph (manual + inferred links) |
 | `sense` | Behavioral baselines (mean/stddev of monitoring metrics) + anomaly evaluation |
-| `threat_intel` | NVD CVE feed adapter — `Vulnerability` records, manual per-CVE sync |
+| `threat_intel` | NVD CVE feed adapter — `Vulnerability` records, manual per-CVE sync; asset-to-CVE links (`AssetVulnerability`) and CPE matching of detected services (`matching.py`) |
 | `simulation` | Demo-data generator — creates a self-contained fake scenario that flows through the real detection pipeline |
 | `admin` | Scan-range config, system stats dashboard (NOT user management — that's in `users`) |
 | `device_management` | Authorized device enrollment + agent protocol (poll/report). Separate auth boundary from the human JWT system — see §14 |
@@ -128,7 +128,7 @@ for t in sorted(expected & actual):
 
 Run `alembic upgrade head` against a genuinely fresh SQLite file first, then run the above against that same file. Also always test `alembic downgrade -1` then `upgrade head` again — cheap insurance.
 
-**Postgres-specific gotcha**: if two migrations create separate tables that both use the same named `sa.Enum(...)`/`postgresql.ENUM(...)` (e.g. `metrictype` used by both `monitoring_samples` and `behavioral_baselines`), the second migration must pass `create_type=False`, or Postgres will error trying to `CREATE TYPE` something that already exists. SQLite doesn't have this concept at all, so SQLite-only testing won't catch it — I never got a real Postgres instance running in this sandbox (tried; `apt-get install postgresql` failed on the package mirror), so this pattern is applied correctly by convention/documentation knowledge, not verified live. Keep that in mind if something Postgres-specific ever breaks.
+**Postgres-specific gotcha**: if two migrations create separate tables that both use the same named `sa.Enum(...)`/`postgresql.ENUM(...)` (e.g. `metrictype` used by both `monitoring_samples` and `behavioral_baselines`), the second migration must pass `create_type=False`, or Postgres will error trying to `CREATE TYPE` something that already exists. SQLite doesn't have this concept at all, so SQLite-only testing won't catch it. A real Postgres 16 is now available in the sandbox (`apt-get update`, then `apt-get install -y postgresql`, then `pg_ctlcluster 16 main start`; the earlier install failure was a stale package index). The full migration chain was verified against it on 2026-10-07: upgrade, `alembic check` with zero differences, downgrade to base, and re-upgrade. Run that cycle on both SQLite and Postgres for any new migration, because `alembic check` on SQLite hides type, timezone and constraint differences.
 
 **Migration fork check**: `alembic heads` should always print exactly one line. If it prints two, two migrations were written against the same `down_revision` in parallel (this happened once, merging independently-developed branches) — fix by editing one migration's `down_revision` to point after the other instead.
 
@@ -201,7 +201,7 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
-Full test suite: `cd backend && python -m pytest tests/ -q` (currently 271 tests, all passing).
+Full test suite: `cd backend && python -m pytest tests/ -q` (currently 323 tests, all passing).
 
 ---
 

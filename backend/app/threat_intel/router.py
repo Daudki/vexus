@@ -7,8 +7,16 @@ from app.core.rate_limit import limiter
 from app.database.session import get_db
 from app.threat_intel.provider import NVDProvider, ThreatIntelProviderError
 from app.threat_intel.repository import VulnerabilityRepository
-from app.threat_intel.schemas import SyncCVEResponse, ThreatIntelStatus, VulnerabilityListResponse, VulnerabilityRead
-from app.threat_intel.service import ThreatIntelService
+from app.threat_intel.schemas import (
+    AssetVulnerabilityCreate,
+    AssetVulnerabilityRead,
+    MatchSummaryRead,
+    SyncCVEResponse,
+    ThreatIntelStatus,
+    VulnerabilityListResponse,
+    VulnerabilityRead,
+)
+from app.threat_intel.service import AssetVulnerabilityError, AssetVulnerabilityService, ThreatIntelService
 from app.users.models import RoleName, User
 
 router = APIRouter(prefix="/api/v1/threat-intel", tags=["threat-intelligence"])
@@ -76,4 +84,58 @@ def sync_cve(
         updated=updated,
         event_id=event_id,
         source=vulnerability.source,
+    )
+
+
+@router.get("/assets/{asset_id}/vulnerabilities", response_model=list[AssetVulnerabilityRead])
+def list_asset_vulnerabilities(
+    asset_id: str, db: Session = Depends(get_db), _: User = Depends(require_any_role)
+) -> list[AssetVulnerabilityRead]:
+    try:
+        return AssetVulnerabilityService(db).list_for_asset(asset_id)
+    except AssetVulnerabilityError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@router.post("/assets/{asset_id}/vulnerabilities", response_model=AssetVulnerabilityRead, status_code=status.HTTP_201_CREATED)
+def link_asset_vulnerability(
+    asset_id: str,
+    payload: AssetVulnerabilityCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.ADMIN, RoleName.SECURITY_ANALYST)),
+) -> AssetVulnerabilityRead:
+    try:
+        return AssetVulnerabilityService(db).link_manual(
+            asset_id, payload.cve_id, actor=current_user, ip_address=request.client.host
+        )
+    except AssetVulnerabilityError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@router.delete("/assets/{asset_id}/vulnerabilities/{cve_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_asset_vulnerability(
+    asset_id: str,
+    cve_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.ADMIN, RoleName.SECURITY_ANALYST)),
+) -> None:
+    try:
+        AssetVulnerabilityService(db).unlink(asset_id, cve_id, actor=current_user, ip_address=request.client.host)
+    except AssetVulnerabilityError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@router.post("/match", response_model=MatchSummaryRead)
+def run_matching(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.ADMIN, RoleName.SECURITY_ANALYST)),
+) -> MatchSummaryRead:
+    summary = AssetVulnerabilityService(db).match_all(actor=current_user, ip_address=request.client.host)
+    return MatchSummaryRead(
+        assets_evaluated=summary.assets_evaluated,
+        links_created=summary.links_created,
+        links_removed=summary.links_removed,
     )

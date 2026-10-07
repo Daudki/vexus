@@ -33,6 +33,9 @@ from app.topology import models as _topology_models  # noqa: F401,E402
 from app.risk import models as _risk_models  # noqa: F401,E402
 from app.incidents import models as _incidents_models  # noqa: F401,E402
 from app.ai import models as _ai_models  # noqa: F401,E402
+from app.sense import models as _sense_models  # noqa: F401,E402
+from app.threat_intel import models as _threat_intel_models  # noqa: F401,E402
+from app.device_management import models as _device_management_models  # noqa: F401,E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL)

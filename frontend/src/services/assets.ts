@@ -68,3 +68,19 @@ export function updateAsset(assetId: string, payload: AssetUpdate): Promise<Asse
     body: JSON.stringify(payload),
   });
 }
+
+export interface AssetServiceItem {
+  id: string;
+  port: number;
+  protocol: string;
+  name: string | null;
+  product: string | null;
+  version: string | null;
+  cpe: string | null;
+  first_seen: string;
+  last_seen: string;
+}
+
+export function getAssetServices(assetId: string): Promise<AssetServiceItem[]> {
+  return apiRequest<AssetServiceItem[]>(`/assets/${assetId}/services`);
+}

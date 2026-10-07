@@ -53,3 +53,42 @@ export function listVulnerabilities(
 export function syncCVE(cveId: string): Promise<SyncCVEResponse> {
   return apiRequest<SyncCVEResponse>(`/threat-intel/sync/cve/${encodeURIComponent(cveId)}`, { method: "POST" });
 }
+
+export interface AssetVulnerabilityLink {
+  id: string;
+  asset_id: string;
+  cve_id: string;
+  cvss_score: number | null;
+  cvss_severity: string | null;
+  is_rejected: boolean;
+  confidence: "confirmed" | "inferred";
+  match_source: string;
+  created_at: string;
+}
+
+export interface MatchSummary {
+  assets_evaluated: number;
+  links_created: number;
+  links_removed: number;
+}
+
+export function listAssetVulnerabilities(assetId: string): Promise<AssetVulnerabilityLink[]> {
+  return apiRequest<AssetVulnerabilityLink[]>(`/threat-intel/assets/${assetId}/vulnerabilities`);
+}
+
+export function linkAssetVulnerability(assetId: string, cveId: string): Promise<AssetVulnerabilityLink> {
+  return apiRequest<AssetVulnerabilityLink>(`/threat-intel/assets/${assetId}/vulnerabilities`, {
+    method: "POST",
+    body: JSON.stringify({ cve_id: cveId }),
+  });
+}
+
+export function unlinkAssetVulnerability(assetId: string, cveId: string): Promise<void> {
+  return apiRequest<void>(`/threat-intel/assets/${assetId}/vulnerabilities/${encodeURIComponent(cveId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function runVulnerabilityMatching(): Promise<MatchSummary> {
+  return apiRequest<MatchSummary>("/threat-intel/match", { method: "POST" });
+}
